@@ -1,6 +1,8 @@
 /*
 ChemicalProcessHelper.hpp
-복잡한 화학 공정에서의 계산을 편리하게 하기 위함.
+복잡한 화학 공정에서의 계산을 물질 흐름을 중심으로 빠르고 편리하게 계산함.
+
+본 헤더 파일은 멀티 쓰레딩을 염두에 두고 설계한 것이 아니므로 thread-safe한지 알 수 없음.
 
 주요 클래스: ChemBase, ProcObjBase, MixerBase, RxtorBase, SpliterBase, StreamBase
 ProcObjBase
@@ -18,7 +20,7 @@ ProcObjBase
 #include <regex>
 #include <algorithm>
 
-// 이 코드는 Eigen 라이브러리를 필수적으로 요구함.
+// 이 헤더는 Eigen 3 라이브러리를 필수적으로 요구함.
 #include <Eigen/Dense>
 
 namespace chemprochelper
@@ -788,9 +790,58 @@ namespace chemprochelper
     };
     int ProcObjBase::nextObjNum = 0;
 
-    class MixerBase : public ProcObjBase
-    {
-        
+    class RxtorBase : public ProcObjBase
+    /*
+    화학 반응기를 나타내는 클래스. ProcObjBase로부터 상속됨.
+    ProcObjBase에서 화학 반응식 및 몰수지 부분을 추가함.
+    이 클래스는 Eigen 3 라이브러리의 Solver 기능을 사용함.
+    INTEL(R) Math Kernel Library, OpenBLAS 등이 있는 경우 CMake를 이용해 속도 향상이 가능함.
+    */
+    {   
+        protected:
+
+            int _rxtorNum;
+
+            inline void _setRxtorNum()
+            {
+                _rxtorNum = nextRxtorNum++;
+                std::pair<int, RxtorBase*> toRxtorMap;
+                toRxtorMap.first = _rxtorNum;
+                toRxtorMap.second = this;
+                RxtorBase::RxtorMap.insert(toRxtorMap);
+            }
+
+        public:
+
+            // 다음 생성자 호출시 부여받는  _rxtorNum.
+            static int nextRxtorNum;
+
+            // Rxtorase 객체들의 _rxtorNum과 포인터를 저장함.
+            static std::map<int, RxtorBase*> RxtorMap;
+
+            // 생성자 선언부
+
+            RxtorBase():
+                ProcObjBase() {_setRxtorNum();};
+            
+            RxtorBase(const std::string& name):
+                ProcObjBase(name) {_setRxtorNum();};
+            
+            RxtorBase(const std::string& name, StreamBase* inStream, StreamBase* outStream):
+                ProcObjBase(name, {inStream}, {outStream}) {_setRxtorNum();};
+            
+            RxtorBase(const std::string& name, const int& inStreamNum, const int& outStreamNum):
+                ProcObjBase(name, {inStreamNum}, {outStreamNum}) {_setRxtorNum();};
+            
+            RxtorBase(const std::string& name, StreamBase* inStream, StreamBase* outStream,
+                const std::vector<float>& scalarVec):
+                ProcObjBase(name, {inStream}, {outStream}, scalarVec) {_setRxtorNum();};
+            
+            RxtorBase(const std::string& name, const int& inStreamNum, const int& outStreamNum,
+                const std::vector<float>& scalarVec):
+                ProcObjBase(name, {inStreamNum}, {outStreamNum}, scalarVec) {_setRxtorNum();};
+            
+            
     };
 }
 
