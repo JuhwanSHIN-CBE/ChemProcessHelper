@@ -247,12 +247,7 @@ namespace chemprochelper
     4) ChemBase("Water", 18.0);
     */
     {
-        protected:
-
-            int _chemNum;
-            std::string _name;
-            std::string _abb;
-            float _mw;
+        private:
 
             inline void _setChemNum()
             // _chemNum을 할당함.
@@ -263,6 +258,14 @@ namespace chemprochelper
                 toChemMap.second = this;
                 ChemBase::ChemMap.insert(toChemMap);
             };
+
+
+        protected:
+
+            int _chemNum;
+            std::string _name;
+            std::string _abb;
+            float _mw;
 
         public:
 
@@ -298,15 +301,7 @@ namespace chemprochelper
     화학공정흐름도에서 물질의 흐름(flow stream)을 표현하는 클래스.
     */
     {
-        protected:
-
-            // _streamNum은 0부터 시작함.
-            int _streamNum;
-
-            std::map<ChemBase*, float> _chemMol;
-
-            // 해당 화학종의 몰수가 알려져 있으면 true, 아니면 false 값을 부여함.
-            std::map<ChemBase*, bool> _chemIsKnown;
+        private:
 
             inline void _setStreamNum()
             // _streamNum을 설정함.
@@ -317,6 +312,16 @@ namespace chemprochelper
                 toStreamMap.second = this;
                 StreamBase::StreamMap.insert(toStreamMap);
             }
+
+        protected:
+
+            // _streamNum은 0부터 시작함.
+            int _streamNum;
+
+            std::map<ChemBase*, float> _chemMol;
+
+            // 해당 화학종의 몰수가 알려져 있으면 true, 아니면 false 값을 부여함.
+            std::map<ChemBase*, bool> _chemIsKnown;
 
         public:
 
@@ -602,14 +607,7 @@ namespace chemprochelper
     MixerBase, RxtorBase, SpliterBase의 상위 클래스.
     */
     {
-        protected:
-
-            int _objNum;
-            std::string _name;
-            std::vector<StreamBase*> _inStream;
-            std::vector<StreamBase*> _outStream;
-            Eigen::MatrixXf _mainMat;
-            std::vector<float> _scalarVec;
+        private:
 
             inline void _setObjNum()
             // _objNum을 할당함.
@@ -620,6 +618,15 @@ namespace chemprochelper
                 toObjMap.second = this;
                 ProcObjBase::ObjMap.insert(toObjMap);
             }
+
+        protected:
+
+            int _objNum;
+            std::string _name;
+            std::vector<StreamBase*> _inStream;
+            std::vector<StreamBase*> _outStream;
+            Eigen::MatrixXf _mainMat;
+            std::vector<float> _scalarVec;
 
         public:
 
@@ -798,9 +805,7 @@ namespace chemprochelper
     INTEL(R) Math Kernel Library, OpenBLAS 등이 있는 경우 CMake를 이용해 속도 향상이 가능함.
     */
     {   
-        protected:
-
-            int _rxtorNum;
+        private:
 
             inline void _setRxtorNum()
             {
@@ -810,6 +815,14 @@ namespace chemprochelper
                 toRxtorMap.second = this;
                 RxtorBase::RxtorMap.insert(toRxtorMap);
             }
+
+        protected:
+
+            int _rxtorNum;
+
+            std::vector<ChemBase*> _chemList;
+            std::map<ChemBase*, int> _chemMap;
+            Eigen::MatrixXf _rxnRatio;
 
         public:
 
@@ -841,6 +854,31 @@ namespace chemprochelper
                 const std::vector<float>& scalarVec):
                 ProcObjBase(name, {inStreamNum}, {outStreamNum}, scalarVec) {_setRxtorNum();};
             
+            //인스턴스 선언부
+
+            bool checkStreamNum()
+            // 입력 스트림과 출력 스트림이 모두 1개뿐인지 확인함.
+            {
+                if (_inStream.size() == 1 && _outStream.size() == 1) return true;
+                else return false;
+            }
+
+            bool makeChemList()
+            // 입력 스트림과 출력 스트림의 물질들을 모두 저장한 _chemList를 생성함. 성공한 경우 true, 실패한 경우 false 반환.
+            {
+                if (!checkStreamNum()) false;
+
+                _chemList = std::vector<ChemBase*>();
+                
+                auto inStream = _inStream[0];
+                auto outStream = _outStream[0];
+
+                std::map<ChemBase*, bool>::const_iterator it_bool;
+                std::map<ChemBase*, float>::const_iterator it_float;
+
+                // to be continued.
+            }
+
             
     };
 }
