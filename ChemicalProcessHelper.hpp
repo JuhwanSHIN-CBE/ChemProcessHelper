@@ -271,8 +271,6 @@ namespace chemprochelper
                 ChemList.push_back(this);
             };
 
-        protected:
-
             int _ChemNum;
             std::string _Name;
             std::string _Abb;
@@ -317,11 +315,22 @@ namespace chemprochelper
             typedef std::vector<bool> BoolVec;
             typedef std::vector<int> IntVec;
 
-            // 다음 생성자 호출시 부여받는 _streamNum.
+            // _StreamNum은 0부터 시작함.
+            int _StreamNum;
+
+            // 다음 생성자 호출시 부여받는 _StreamNum.
             static int nextStreamNum;
 
             // StreamBase 객체들의 포인터를 저장함.
             static std::vector<StreamBase*> StreamList;
+
+            ChemPtrVec _ChemList;
+
+            // 해당 화학종의 몰수가 알려져 있으면 true, 아니면 false 값을 부여함.
+            BoolVec _ChemIsKnown;
+
+            // _ChemIsKnown[i] = false이면 _ChemMol[i] = 0.
+            FloatVec _ChemMol;
 
 
             inline void _setStreamNum()
@@ -343,6 +352,8 @@ namespace chemprochelper
             inline bool _addChem(ChemBase* Chem, const bool& IsKnown, const float& Mol)
             // StreamBase 객체에 화학종을 추가함. 성공시 true를 반환함.
             {
+                if (inChemList(Chem)) return false;
+
                 _ChemList.push_back(Chem);
                 _ChemIsKnown.push_back(IsKnown);
                 _ChemMol.push_back(Mol);
@@ -378,34 +389,26 @@ namespace chemprochelper
             // StreamBase 객체에 i번째 인덱스의 화학종을 제거함. 성공시 true를 반환함.
             {
                 if (!inChemList(Chem)) return false;
-                int idx(functinos::getPosition(_ChemList, Chem));
+                int idx(functions::getPosition(_ChemList, Chem));
 
-                _ChemList.erase(_ChemList.begin()+i);
-                _ChemIsKnown.erase(_ChemIsKnown.begin()+i);
-                _ChemMol.erase(_ChemMol.begin()+i);
+                _ChemList.erase(_ChemList.begin()+idx);
+                _ChemIsKnown.erase(_ChemIsKnown.begin()+idx);
+                _ChemMol.erase(_ChemMol.begin()+idx);
 
                 return true;
             }
 
-        protected:
-
-            // _streamNum은 0부터 시작함.
-            int _StreamNum;
-
-            ChemPtrVec _ChemList;
-
-            // 해당 화학종의 몰수가 알려져 있으면 true, 아니면 false 값을 부여함.
-            BoolVec _ChemIsKnown;
-
-            // _ChemIsKnown[i] = false이면 _ChemMol[i] = 0.
-            FloatVec _ChemMol;
-
         public:
+
+            static auto getStreamList() {return StreamList;}
+            static auto getStreamPtr(const int& i) {return StreamList[i];}
             
             // 생성자 정의부
 
-            StreamBase() {_setStreamNum();};
-            
+            StreamBase()
+            {
+                _setStreamNum();
+            }            
             StreamBase(const ChemPtrVec& ChemList)
             {
                 BoolVec ChemIsKnown(ChemList.size());
@@ -517,29 +520,21 @@ namespace chemprochelper
             bool addChem(ChemBase* Chem)
             // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
             {
-                if (!inChemList(Chem)) return false;
-
                 return _addChem(Chem, false, 0);
             }
             bool addChem(const int& ChemNum)
             // ChemBase::_chemNum을 활용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
             {
-                if (!inChemList(ChemBase::getChemPtr(ChemNum))) return false;
-
                 return _addChem(ChemBase::getChemPtr(ChemNum), false, 0);
             }
             bool addChem(ChemBase* Chem, const float& Mol)
             // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
             {
-                if (!inChemList(Chem)) return false;
-
                 return _addChem(Chem, true, Mol);
             }
             bool addChem(const int& ChemNum, const float& Mol)
             // ChemBase::_chemNum을 활용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
             {
-                if (!inChemList(ChemBase::getChemPtr(ChemNum))) return false;
-
                 return _addChem(ChemBase::getChemPtr(ChemNum), true, Mol);
             }
             bool addChem(const ChemPtrVec& ChemList)
@@ -548,7 +543,7 @@ namespace chemprochelper
                 bool res = true;
                 for (auto Chem : ChemList)
                 {
-                    if (!addChem(Chem)) res = false;
+                    if (!_addChem(Chem, false, 0)) res = false;
                 }
 
                 return res;
@@ -559,7 +554,7 @@ namespace chemprochelper
                 bool res = true;
                 for (auto i : ChemNumList)
                 {
-                    if (!addChem(i)) res = false;
+                    if (!_addChem(ChemBase::getChemPtr(i), false, 0)) res = false;
                 }
 
                 return res;
@@ -572,7 +567,7 @@ namespace chemprochelper
                 bool res = true;
                 for (auto i = 0; i < ChemList.size(); ++i)
                 {
-                    if (!addChem(ChemList[i], ChemMol[i])) res = false;
+                    if (!_addChem(ChemList[i], true, ChemMol[i])) res = false;
                 }
 
                 return res;
@@ -585,7 +580,7 @@ namespace chemprochelper
                 bool res = true;
                 for (auto i = 0; i < ChemNumList.size(); ++i)
                 {
-                    if (!addChem(ChemNumList[i], ChemMol[i])) res = false;
+                    if (!_addChem(ChemBase::getChemPtr(ChemNumList[i]), true, ChemMol[i])) res = false;
                 }
 
                 return res;
@@ -602,11 +597,11 @@ namespace chemprochelper
                     it = ChemMolMap.find(Chem);
                     if (it == ChemMolMap.end())
                     {
-                        buff = addChem(Chem);
+                        buff = _addChem(Chem, false, 0);
                     }
                     else
                     {
-                        buff = addChem(Chem, it->second);
+                        buff = _addChem(Chem, false, it->second);
                     }
 
                     if (!buff) res = false;
@@ -623,8 +618,8 @@ namespace chemprochelper
                 for (auto i = 0; i < ChemList.size(); ++i)
                 {
                     buff = true;
-                    if (ChemIsKnown[i]) buff = addChem(ChemList[i], ChemMol[i]);
-                    else buff = addChem(ChemList[i]);
+                    if (ChemIsKnown[i]) buff = _addChem(ChemList[i], true, ChemMol[i]);
+                    else buff = _addChem(ChemList[i], false, 0);
 
                     if (!buff) res = false;
                 }
@@ -756,193 +751,197 @@ namespace chemprochelper
     {
         private:
 
-            inline void _setObjNum()
-            // _objNum을 할당함.
+            typedef std::vector<ChemBase*> ChemPtrVec;
+            typedef std::vector<StreamBase*> StreamPtrVec;
+            typedef std::vector<bool> BoolVec;
+            typedef std::vector<float> FloatVec;
+            typedef std::vector <int> IntVec;
+
+            // _ProcObjNum은 0부터 시작함.
+            int _ProcObjNum;
+
+            // 다음 생성자 호출시 부여받는 _ProcObjNum
+            static int nextProcObjNum;
+
+            // ProcObjBase 객체들의 포인터를 저장함.
+            static std::vector<ProcObjBase*> ProcObjList;
+            
+            StreamPtrVec _inStream;
+            StreamPtrVec _outStream;
+
+            inline void _setProcObjNum()
+            // _ProcObjNum을 할당함.
             {
-                _objNum = nextObjNum++;
-                std::pair<int, ProcObjBase*> toObjMap;
-                toObjMap.first = _objNum;
-                toObjMap.second = this;
-                ProcObjBase::ObjMap.insert(toObjMap);
+                _ProcObjNum = nextProcObjNum++;
+                ProcObjList.push_back(this);
             }
 
+            inline bool _addStream(StreamBase* Stream, const bool& direction)
+            // Stream을 추가함. direction = true이면 in, false이면 out이다. 성공시 true 반환.
+            {
+                if (inStreamList(Stream, direction)) return false;
+
+                if (direction) _inStream.push_back(Stream);
+                else _outStream.push_back(Stream);
+
+                return true;
+            }
+
+            inline bool _delStream(StreamBase* Stream, const bool& direction)
+            // Stream을 제거함. direction = true이면 in, false이면 out이다. 성공시 true 반환.
+            {
+                if (!inStreamList(Stream, direction)) return false;
+
+                int idx;
+                if (direction)
+                {
+                    idx = functions::getPosition(_inStream, Stream);
+                    _inStream.erase(_inStream.begin()+idx);
+                }
+                else
+                {
+                    idx = functions::getPosition(_outStream, Stream);
+                    _outStream.erase(_outStream.begin()+idx);
+                }
+                
+                return true;
+            }
+        
         protected:
 
-            int _objNum;
-            std::string _name;
-            std::vector<StreamBase*> _inStream;
-            std::vector<StreamBase*> _outStream;
-            Eigen::MatrixXf _mainMat;
-            std::vector<float> _scalarVec;
+            std::string __Name;
+            Eigen::MatrixXf __MainMat;
+            FloatVec __ScalarVec;
 
         public:
 
-            // 다음 생성자 호출시 부여받는 _objNum.
-            static int nextObjNum;
-
-            // StreamBase 객체들의 _objNum과 포인터를 저장함.
-            static std::map<int, ProcObjBase*> ObjMap;
+            static auto getProcObjList() {return ProcObjList;}
+            static auto getProcObjPtr(const int& i) {return ProcObjList[i];}
 
             // 생성자 선언부
 
-            ProcObjBase() {_setObjNum();};
-
-            ProcObjBase(const std::string& name):
-                _name(name) {_setObjNum();};
-
-            ProcObjBase(const std::string& name, const Eigen::MatrixXf& mainMat):
-                _name(name), _mainMat(mainMat) {_setObjNum();};
-
-            ProcObjBase(const std::string& name, const std::vector<StreamBase*>& inStream,
-                const std::vector<StreamBase*>& outStream):
-                _name(name), _inStream(inStream), _outStream(outStream) {_setObjNum();};
-
-            ProcObjBase(const std::string& name, const std::vector<int>& inStreamNum,
-                const std::vector<int>& outStreamNum):
-                _name(name)
-            // StreamNum을 활용한 생성자 호출.
+            ProcObjBase()
             {
-                std::map<int, StreamBase*>::const_iterator it;
-                for (auto i : inStreamNum)
-                {
-                    it = StreamBase::StreamMap.find(i);
-                    if (it == StreamBase::StreamMap.end()) throw std::runtime_error("wrong Stream::_streamNum");
-                    _inStream.push_back(it->second);
-                }
-                for (auto o : outStreamNum)
-                {
-                    it = StreamBase::StreamMap.find(o);
-                    if (it == StreamBase::StreamMap.end()) throw std::runtime_error("wrong Stream::_streamNum");
-                    _outStream.push_back(it->second);
-                }
-
-                _setObjNum();
-            };
-
-            ProcObjBase(const std::string& name, const std::vector<StreamBase*>& inStream,
-                const std::vector<StreamBase*>& outStream, const std::vector<float>& scalarVec):
-                _name(name), _inStream(inStream), _outStream(outStream), _scalarVec(scalarVec) {_setObjNum();};
-
-            ProcObjBase(const std::string& name, const std::vector<int>& inStreamNum,
-                const std::vector<int>& outStreamNum, const std::vector<float>& scalarVec):
-                _name(name), _scalarVec(scalarVec)
+                _setProcObjNum();
+            }
+            ProcObjBase(const StreamPtrVec& inStream, const StreamPtrVec& outStream):
+                _inStream(inStream), _outStream(outStream)
             {
-                std::map<int, StreamBase*>::const_iterator it;
-                for (auto i : inStreamNum)
-                {
-                    it = StreamBase::StreamMap.find(i);
-                    if (it == StreamBase::StreamMap.end()) throw std::runtime_error("wrong Stream::_streamNum");
-                    _inStream.push_back(it->second);
-                }
-                for (auto o : outStreamNum)
-                {
-                    it = StreamBase::StreamMap.find(o);
-                    if (it == StreamBase::StreamMap.end()) throw std::runtime_error("wrong Stream::_streamNum");
-                    _outStream.push_back(it->second);
-                }
+                _setProcObjNum();
+            }
+            ProcObjBase(const IntVec& inStreamNum, const IntVec& outStreamNum)
+            {
+                StreamPtrVec inStream(inStreamNum.size());
+                StreamPtrVec outStream(outStreamNum.size());
+                for (auto i : inStreamNum) inStream[i] = StreamBase::getStreamPtr(i);
+                for (auto o : outStreamNum) outStream[o] = StreamBase::getStreamPtr(o);
 
-                _setObjNum();
+                _inStream = inStream;
+                _outStream = outStream;
             }
 
             // setter/getter 정의부
 
-            std::string getName() {return _name;}
-            std::vector<StreamBase*> getInStream() {return _inStream;}
-            std::vector<StreamBase*> getOutStream() {return _outStream;}
-            Eigen::MatrixXf getMainMat() {return _mainMat;}
-            std::vector<float> getScalarVec() {return _scalarVec;}
-
-            void setName(const std::string& name) {_name = name;}
-            void setMainMat(const Eigen::MatrixXf& mainMat) {_mainMat = mainMat;}
-            void setScalarVec(const std::vector<float>& ScalarVec) {_scalarVec = ScalarVec;}
+            auto getName() {return __Name;}
+            auto getInStream() {return _inStream;}
+            auto getOutStream() {return _outStream;}
+            auto getMainMat() {return __MainMat;}
+            auto getScalarVec() {return __ScalarVec;}
             
-            bool addStream(StreamBase* stream, bool direction)
+            bool addStream(StreamBase* Stream, const bool& direction)
             // direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
             {
-                std::vector<StreamBase*>::const_iterator it;
-                if (direction)
-                {
-                    it = std::find(_inStream.begin(), _inStream.end(), stream);
-                    if (it != _inStream.end()) return false;
-                    _inStream.push_back(stream);
-                }
-                else
-                {
-                    it = std::find(_outStream.begin(), _outStream.end(), stream);
-                    if (it != _inStream.end()) return false;
-                    _outStream.push_back(stream);
-                }
-
-                return true;
+                return _addStream(Stream, direction);
             }
-            bool addStream(int streamNum, bool direction)
-            // StreamBase::_streamNum을 사용함. direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
+            bool addStream(const int& StreamNum, const bool& direction)
+            // StreamBase::_StreamNum을 사용함. direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
             {
-                std::map<int, StreamBase*>::const_iterator c_it = StreamBase::StreamMap.find(streamNum);
-                if (c_it == StreamBase::StreamMap.end()) throw std::runtime_error("wrong streamNum");
-                auto stream = c_it->second;
+                return _addStream(StreamBase::getStreamPtr(StreamNum), direction);             
+            }
+            bool addStream(const StreamPtrVec& StreamList, const BoolVec& direction)
+            // direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
+            {
+                assert(StreamList.size() == direction.size());
 
-                std::vector<StreamBase*>::const_iterator it;
-                if (direction)
+                bool res = true;
+                for (auto i = 0; i < StreamList.size(); ++i)
                 {
-                    it = std::find(_inStream.begin(), _inStream.end(), stream);
-                    if (it != _inStream.end()) return false;
-                    _inStream.push_back(stream);
-                }
-                else
-                {
-                    it = std::find(_outStream.begin(), _outStream.end(), stream);
-                    if (it != _inStream.end()) return false;
-                    _outStream.push_back(stream);
+                    if (!_addStream(StreamList[i], direction[i])) res = false;
                 }
 
-                return true;                
+                return res;
+            }
+            bool addStream(const IntVec& StreamNumList, const BoolVec& direction)
+            // StreamBase::_StreamNum을 사용함. direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
+            {
+                assert(StreamNumList.size() == direction.size());
+
+                bool res = true;
+                for (auto i = 0; i < StreamNumList.size(); ++i)
+                {
+                    if (!_addStream(StreamBase::getStreamPtr(StreamNumList[i]), direction[i])) res = false;
+                }
+
+                return res;
             }
 
-            bool delStream(StreamBase* stream, bool direction)
+            bool delStream(StreamBase* Stream, const bool& direction)
             // direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
             {   
-                std::vector<StreamBase*>::iterator it;
-                if (direction)
-                {
-                    it = std::find(_inStream.begin(), _inStream.end(), stream);
-                    if (it == _inStream.end()) return false;
-                    _inStream.erase(it);
-                }
-                else
-                {
-                    it = std::find(_outStream.begin(), _outStream.end(), stream);
-                    if (it == _outStream.end()) return false;
-                    _outStream.erase(it);
-                }
-                
-                return true;
+                return _delStream(Stream, direction);
             }
-            bool delStream(int streamNum, bool direction)
-            // StreamBase::_streamNum을 사용함. direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
+            bool delStream(const int& StreamNum, const bool& direction)
+            // StreamBase::_StreamNum을 사용함. direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
             {
-                std::map<int, StreamBase*>::const_iterator c_it = StreamBase::StreamMap.find(streamNum);
-                if (c_it == StreamBase::StreamMap.end()) throw std::runtime_error("wrong streamNum");
-                auto stream = c_it->second;
+                return _delStream(StreamBase::getStreamPtr(StreamNum), direction);
+            }
+            bool delStream(const StreamPtrVec& StreamList, const BoolVec& direction)
+            // direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
+            {
+                assert(StreamList.size() == direction.size());
 
-                std::vector<StreamBase*>::iterator it;
+                bool res = true;
+                for (auto i = 0; i < StreamList.size(); ++i)
+                {
+                    if (!_delStream(StreamList[i], direction[i])) res = false;
+                }
+
+                return false;
+            }
+            bool delStream(const IntVec& StreamNumList, const BoolVec& direction)
+            // StreamBase::_StreamNum을 사용함. direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
+            {
+                assert(StreamNumList.size() == direction.size());
+
+                bool res = true;
+                for (auto i = 0; i < StreamNumList.size(); ++i)
+                {
+                    if (!_delStream(StreamBase::getStreamPtr(StreamNumList[i]), direction[i])) res = false;
+                }
+
+                return res;
+            }
+            // 인스턴스 정의부
+
+            bool inStreamList(StreamBase* Stream, bool direction)
+            // Stream을 확인함. direction = true이면 in, false이면 out이다. 이미 존재하는 경우 true 반환.
+            {   
+                StreamPtrVec::const_iterator it;
                 if (direction)
                 {
-                    it = std::find(_inStream.begin(), _inStream.end(), stream);
+                    it = std::find(_inStream.begin(), _inStream.end(), Stream);
                     if (it == _inStream.end()) return false;
-                    _inStream.erase(it);
                 }
                 else
                 {
-                    it = std::find(_outStream.begin(), _outStream.end(), stream);
+                    it = std::find(_outStream.begin(), _outStream.end(), Stream);
                     if (it == _outStream.end()) return false;
-                    _outStream.erase(it);
                 }
-                
+
                 return true;
             }
     };
-    int ProcObjBase::nextObjNum = 0;
+    int ProcObjBase::nextProcObjNum = 0;
 
     class RxtorBase : public ProcObjBase
     /*
