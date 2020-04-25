@@ -1,10 +1,12 @@
 /*
 ChemicalProcessHelper.hpp
+----------------------------------------
 복잡한 화학 공정에서의 계산을 물질 흐름을 중심으로 빠르고 편리하게 계산함.
 
-본 헤더 파일은 멀티 쓰레딩을 염두에 두고 설계한 것이 아니므로 thread-safe한지 알 수 없음.
+본 헤더 파일은 thread-safe 하지 않음.
 
-주요 클래스: ChemBase, ProcObjBase, MixerBase, RxtorBase, SpliterBase, StreamBase
+주요 클래스: ChemBase, RxnBase, StreamBase, ProcObjBase
+----------------------------------------
 ProcObjBase
     <= MixerBase, RxtorBase, SpliterBase
 */
@@ -248,60 +250,128 @@ namespace chemprochelper
     class ChemBase
     /*
     화합물을 구성하는 기본 클래스
+    주의) 이 클래스는 몰질량 등의 정보를 포함하지 않은 클래스이다.
 
     사용 예시
     1) ChemBase("H2O");
     2) ChemBase("Water", "H2O");
-    3) ChemBase("Water", "H2O", 18.0);
-    4) ChemBase("Water", 18.0);
     */
     {
         private:
 
             // 다음 생성자 호출시 부여받는 _chemNum.
-            static int nextChemNum;
+            static int _nextChemNum;
 
             // ChemBase 객체들의 포인터를 저장함.
-            static std::vector<ChemBase*> ChemList;
+            static std::vector<ChemBase*> _ChemList;
+
+            // ChemBase 객체들의 _Abb 값을 저장함.
+            static std::vector<std::string> _AbbList;
 
             inline void _setChemNum()
-            // _chemNum을 할당함.
+            // _ChemNum을 할당함.
             {
-                _ChemNum = nextChemNum++;
-                ChemList.push_back(this);
+                _ChemNum = _nextChemNum++;
+                _ChemList.push_back(this);
+                _AbbList.push_back(_Abb);
             };
 
             int _ChemNum;
             std::string _Name;
             std::string _Abb;
-            float _Mw;
 
         public:
 
-            static auto getChemList() {return ChemList;}
-            static auto getChemPtr(const int& i) {return ChemList[i];}
+            static auto getChemList() {return _ChemList;}
+            static auto getChemPtr(const int& i) {return _ChemList[i];}
+            static auto getAbbList() {return _AbbList;}
 
             // 생성자 정의부
 
-            ChemBase() {_setChemNum();};
+            ChemBase():
+                _Name(""), _Abb("") {_setChemNum();};
             
             ChemBase(const std::string& Abb):
-                _Name(Abb), _Abb(Abb), _Mw(functions::calMw(_Abb)) {_setChemNum();};
+                _Name(Abb), _Abb(Abb) {_setChemNum();};
             ChemBase(const std::string& Name, const std::string& Abb):
-                _Name(Name), _Abb(Abb), _Mw(functions::calMw(_Abb)) {_setChemNum();};
-            ChemBase(const std::string& Name, const float& Mw):
-                _Name(Name), _Abb(""), _Mw(Mw) {_setChemNum();};
-            ChemBase(const std::string& Name, const std::string& Abb, const float& Mw):
-                _Name(Name), _Abb(Abb), _Mw(Mw) {_setChemNum();};
+                _Name(Name), _Abb(Abb) {_setChemNum();};
 
             // getter 정의부
             
             auto getName() {return _Name;}
             auto getAbb() {return _Abb;}
-            auto getMw() {return _Mw;}
             auto getChemNum() {return _ChemNum;}
     };
-    int ChemBase::nextChemNum = 0;
+    int ChemBase::_nextChemNum = 0;
+
+    class RxnBase
+    /*
+    화학 반응식을 구성하는 기본 클래스.
+    주의) 화학 반응식을 Parsing 할때 ChemBase::_Abb과 매칭하는 원리이다.
+        ChemBase::_AbbList에 등록되어 있지 않은 형태가 발견될 경우, 
+        functions::getPosition 함수로부터 런타임 에러가 발생함.
+    */
+    {
+        private:
+
+            typedef std::vector<ChemBase*> ChemPtrVec;
+            typedef std::vector<float> FloatVec;
+
+            // 다음 생성자 호출시 부여받는 _RxnNum
+            static int _nextRxnNum;
+
+            // RxnBase 객체들의 포인터를 저장함.
+            static std::vector<RxnBase*> _RxnList;
+
+            inline void _setRxnNum()
+            // _RxnNum을 할당함.
+            {
+                _RxnNum = _nextRxnNum++;
+                _RxnList.push_back(this);
+            }
+
+            int _RxnNum;
+            std::string _Comment;
+
+            ChemPtrVec _ChemList;
+
+            // vi를 저장하는 행렬.
+            Eigen::MatrixXf _EffiMat;
+
+            void _parseEqn(const std::string& eqn, std::string* reac, std::string* prod)
+            // eqn을 '='를 중심으로 front와 back으로 쪼갠다.
+            {
+                auto c_it = std::find(eqn.begin(), eqn.end(), "=");
+                if (c_it == eqn.end()) throw std::runtime_error("invalid chemical equation");
+                
+                reac = &std::string(eqn.begin(), c_it);
+                prod = &std::string(c_it+1, eqn.end());
+            }
+
+            void _setMat()
+            // 입력된 Eqn이 있는
+            {
+
+            }
+
+        public:
+
+            static auto getRxnList() {return _RxnList;}
+            static auto getChemPtr(const int& i) {return _RxnList[i];}
+
+            // 생성자 선언부
+
+            RxnBase()
+            {
+                _setRxnNum();
+            }
+            RxnBase(const std::string& eqn)
+            {
+                std::string reac, prod;
+                _parseEqn(eqn, &reac, &prod);
+            }
+    };
+    int RxnBase::_nextRxnNum = 0;
 
     class StreamBase
     /*
@@ -761,10 +831,10 @@ namespace chemprochelper
             int _ProcObjNum;
 
             // 다음 생성자 호출시 부여받는 _ProcObjNum
-            static int nextProcObjNum;
+            static int _nextProcObjNum;
 
             // ProcObjBase 객체들의 포인터를 저장함.
-            static std::vector<ProcObjBase*> ProcObjList;
+            static std::vector<ProcObjBase*> _ProcObjList;
             
             StreamPtrVec _inStream;
             StreamPtrVec _outStream;
@@ -772,8 +842,8 @@ namespace chemprochelper
             inline void _setProcObjNum()
             // _ProcObjNum을 할당함.
             {
-                _ProcObjNum = nextProcObjNum++;
-                ProcObjList.push_back(this);
+                _ProcObjNum = _nextProcObjNum++;
+                _ProcObjList.push_back(this);
             }
 
             inline bool _addStream(StreamBase* Stream, const bool& direction)
@@ -809,14 +879,20 @@ namespace chemprochelper
         
         protected:
 
+            // protected 항목에 대해서는 자녀 클래스에서 초기화함.
+
             std::string __Name;
             Eigen::MatrixXf __MainMat;
             FloatVec __ScalarVec;
 
+            ChemPtrVec __ChemList;
+            BoolVec __ChemIsKnown;
+            FloatVec __ChemMol;
+
         public:
 
-            static auto getProcObjList() {return ProcObjList;}
-            static auto getProcObjPtr(const int& i) {return ProcObjList[i];}
+            static auto getProcObjList() {return _ProcObjList;}
+            static auto getProcObjPtr(const int& i) {return _ProcObjList[i];}
 
             // 생성자 선언부
 
@@ -941,7 +1017,7 @@ namespace chemprochelper
                 return true;
             }
     };
-    int ProcObjBase::nextProcObjNum = 0;
+    int ProcObjBase::_nextProcObjNum = 0;
 
     class RxtorBase : public ProcObjBase
     /*
@@ -953,22 +1029,38 @@ namespace chemprochelper
     {   
         private:
 
+            typedef std::vector<ChemBase*> ChemPtrVec;
+            typedef std::vector<StreamBase*> StreamPtrVec;
+            typedef std::vector<bool> BoolVec;
+            typedef std::vector<float> FloatVec;
+            typedef std::vector <int> IntVec;
+
+            /*
+            ProcObjBase로부터 다음과 같은 protected 변수들을 상속받음.
+            std::string __Name;
+            Eigen::MatrixXf __MainMat;
+            FloatVec __ScalarVec;
+            ------------------------------
+            ChemPtrVec __ChemList;
+            BoolVec __ChemIsKnown;
+            FloatVec __ChemMol;
+            */
+
+            // _RxtorNum은 0부터 시작함.
+            int _RxtorNum;
+
+            // 다음 생성자 호출시 부여받는 _RxtorNum
+            static int _nextRxtorNum;
+
+            // RxtorBase 객체들의 포인터를 저장함.
+            static std::vector<RxtorBase*> _RxtorList;
+            
+
             inline void _setRxtorNum()
             {
-                _rxtorNum = nextRxtorNum++;
-                std::pair<int, RxtorBase*> toRxtorMap;
-                toRxtorMap.first = _rxtorNum;
-                toRxtorMap.second = this;
-                RxtorBase::RxtorMap.insert(toRxtorMap);
+                _RxtorNum = _nextRxtorNum++;
+                _RxtorList.push_back(this);
             }
-
-        protected:
-
-            int _rxtorNum;
-
-            std::vector<ChemBase*> _chemList;
-            std::map<ChemBase*, int> _chemMap;
-            Eigen::MatrixXf _rxnRatio;
 
         public:
 
