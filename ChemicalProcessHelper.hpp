@@ -177,6 +177,15 @@ namespace chemprochelper
                 std::sregex_iterator _end;
         };
 
+        template<typename T>
+        int getPosition(const std::vector<T>& vector, const T& target)
+        // target의 vector 상의 인덱스를 반환함. 만약 target이 vector에 없는 경우 runtime error 발생.
+        {
+            auto it = std::find(vector.begin(), vector.end(), target);
+            if (it == vector.end()) throw std::runtime_error("target is not in vector");
+            return it - vector.begin();
+        }
+
         auto calMw(const std::string& eqn)
         {
             float mw = 0;
@@ -249,50 +258,50 @@ namespace chemprochelper
     {
         private:
 
-            inline void _setChemNum()
-            // _chemNum을 할당함.
-            {
-                _chemNum = nextChemNum++;
-                std::pair<int, ChemBase*> toChemMap;
-                toChemMap.first = _chemNum;
-                toChemMap.second = this;
-                ChemBase::ChemMap.insert(toChemMap);
-            };
-
-
-        protected:
-
-            int _chemNum;
-            std::string _name;
-            std::string _abb;
-            float _mw;
-
-        public:
-
             // 다음 생성자 호출시 부여받는 _chemNum.
             static int nextChemNum;
 
-            // ChemBase 객체들의 _chemNum과 포인터를 저장함.
-            static std::map<int, ChemBase*> ChemMap;
+            // ChemBase 객체들의 포인터를 저장함.
+            static std::vector<ChemBase*> ChemList;
+
+            inline void _setChemNum()
+            // _chemNum을 할당함.
+            {
+                _ChemNum = nextChemNum++;
+                ChemList.push_back(this);
+            };
+
+        protected:
+
+            int _ChemNum;
+            std::string _Name;
+            std::string _Abb;
+            float _Mw;
+
+        public:
+
+            static auto getChemList() {return ChemList;}
+            static auto getChemPtr(const int& i) {return ChemList[i];}
 
             // 생성자 정의부
 
             ChemBase() {_setChemNum();};
             
-            ChemBase(const std::string& abb):
-                _name(abb), _abb(abb), _mw(functions::calMw(_abb)) {_setChemNum();};
-            ChemBase(const std::string& name, const std::string& abb):
-                _name(name), _abb(abb), _mw(functions::calMw(_abb)) {_setChemNum();};
-            ChemBase(const std::string& name, const float& mw):
-                _name(name), _abb(""), _mw(mw) {_setChemNum();};
-            ChemBase(const std::string& name, const std::string& abb, const float& mw):
-                _name(name), _abb(abb), _mw(mw) {_setChemNum();};
+            ChemBase(const std::string& Abb):
+                _Name(Abb), _Abb(Abb), _Mw(functions::calMw(_Abb)) {_setChemNum();};
+            ChemBase(const std::string& Name, const std::string& Abb):
+                _Name(Name), _Abb(Abb), _Mw(functions::calMw(_Abb)) {_setChemNum();};
+            ChemBase(const std::string& Name, const float& Mw):
+                _Name(Name), _Abb(""), _Mw(Mw) {_setChemNum();};
+            ChemBase(const std::string& Name, const std::string& Abb, const float& Mw):
+                _Name(Name), _Abb(Abb), _Mw(Mw) {_setChemNum();};
 
             // getter 정의부
             
-            auto getName() {return _name;}
-            auto getAbb() {return _abb;}
-            auto getMw() {return _mw;}
+            auto getName() {return _Name;}
+            auto getAbb() {return _Abb;}
+            auto getMw() {return _Mw;}
+            auto getChemNum() {return _ChemNum;}
     };
     int ChemBase::nextChemNum = 0;
 
@@ -303,300 +312,438 @@ namespace chemprochelper
     {
         private:
 
+            typedef std::vector<ChemBase*> ChemPtrVec;
+            typedef std::vector<float> FloatVec;
+            typedef std::vector<bool> BoolVec;
+            typedef std::vector<int> IntVec;
+
+            // 다음 생성자 호출시 부여받는 _streamNum.
+            static int nextStreamNum;
+
+            // StreamBase 객체들의 포인터를 저장함.
+            static std::vector<StreamBase*> StreamList;
+
+
             inline void _setStreamNum()
             // _streamNum을 설정함.
             {
-                _streamNum = StreamBase::nextStreamNum++;
-                std::pair<int, StreamBase*> toStreamMap;
-                toStreamMap.first = _streamNum;
-                toStreamMap.second = this;
-                StreamBase::StreamMap.insert(toStreamMap);
+                _StreamNum = StreamBase::nextStreamNum++;
+                StreamList.push_back(this);
+            }
+
+            inline void _setInnerList(const ChemPtrVec& ChemList,
+                const BoolVec& ChemIsKnown, const FloatVec& ChemMol)
+            // _ChemList, _ChemMol, _ChemIsKnown을 설정함.
+            {
+                _ChemList = ChemList;
+                _ChemIsKnown = ChemIsKnown;
+                _ChemMol = ChemMol;
+            }
+
+            inline bool _addChem(ChemBase* Chem, const bool& IsKnown, const float& Mol)
+            // StreamBase 객체에 화학종을 추가함. 성공시 true를 반환함.
+            {
+                _ChemList.push_back(Chem);
+                _ChemIsKnown.push_back(IsKnown);
+                _ChemMol.push_back(Mol);
+
+                return true;
+            }
+
+            inline bool _setChemMol(ChemBase* Chem, const float& Mol)
+            // 화학종 Chem의 몰 유량을 Mol로 설정함. 성공시 true를 반환함.
+            {
+                if (!inChemList(Chem)) return false;
+                int idx(functions::getPosition(_ChemList, Chem));
+
+                _ChemIsKnown[idx] = true;
+                _ChemMol[idx] = Mol;
+
+                return true;
+            }
+
+            inline bool _setChemUnknown(ChemBase* Chem)
+            // 화학종 Chem의 몰 유량을 미지수로 변경함. 성공시 true를 반환함.
+            {
+                if (!inChemList(Chem)) return false;
+                int idx(functions::getPosition(_ChemList, Chem));
+
+                _ChemIsKnown[idx] = false;
+                _ChemMol[idx] = 0;
+
+                return true;
+            }
+
+            inline bool _delChem(ChemBase* Chem)
+            // StreamBase 객체에 i번째 인덱스의 화학종을 제거함. 성공시 true를 반환함.
+            {
+                if (!inChemList(Chem)) return false;
+                int idx(functinos::getPosition(_ChemList, Chem));
+
+                _ChemList.erase(_ChemList.begin()+i);
+                _ChemIsKnown.erase(_ChemIsKnown.begin()+i);
+                _ChemMol.erase(_ChemMol.begin()+i);
+
+                return true;
             }
 
         protected:
 
             // _streamNum은 0부터 시작함.
-            int _streamNum;
+            int _StreamNum;
 
-            std::map<ChemBase*, float> _chemMol;
+            ChemPtrVec _ChemList;
 
             // 해당 화학종의 몰수가 알려져 있으면 true, 아니면 false 값을 부여함.
-            std::map<ChemBase*, bool> _chemIsKnown;
+            BoolVec _ChemIsKnown;
+
+            // _ChemIsKnown[i] = false이면 _ChemMol[i] = 0.
+            FloatVec _ChemMol;
 
         public:
-
-            // 다음 생성자 호출시 부여받는 _streamNum.
-            static int nextStreamNum;
-
-            // StreamBase 객체들의 _streamNum과 포인터를 저장함.
-            static std::map<int, StreamBase*> StreamMap;
-
+            
             // 생성자 정의부
 
             StreamBase() {_setStreamNum();};
             
-            StreamBase(const std::vector<ChemBase*>& chemList)
+            StreamBase(const ChemPtrVec& ChemList)
             {
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                for (const auto& chem : chemList)
+                BoolVec ChemIsKnown(ChemList.size());
+                FloatVec ChemMol(ChemList.size());
+                for (auto i = 0; i < ChemList.size(); ++i)
                 {
-                    toChemIsKnown.first = chem;
-                    toChemIsKnown.second = false;
-                    _chemIsKnown.insert(toChemIsKnown);
+                    ChemIsKnown[i] = false;
+                    ChemMol[i] = 0;
                 }
 
+                _setInnerList(ChemList, ChemIsKnown, ChemMol);
                 _setStreamNum();
             }
-            StreamBase(const std::vector<ChemBase*>& chemList, const std::map<ChemBase*, float>& chemMol)
-            // 일부 화학종의 몰유량을 알 수가 없는 경우 사용함.
+            StreamBase(const IntVec& ChemNumList)
+            // ChemBase::_chemNum을 활용한 생성자. 
             {
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                std::map<ChemBase*, float>::const_iterator it_chemMol;
-                for (const auto& chem : chemList)
+                ChemPtrVec ChemList(ChemNumList.size());
+                BoolVec ChemIsKnown(ChemNumList.size());
+                FloatVec ChemMol(ChemNumList.size());
+                for (auto i = 0; i < ChemNumList.size(); ++i)
                 {
-                    toChemIsKnown.first = chem;
-                    
-                    it_chemMol = chemMol.find(chem);
-                    if (it_chemMol != chemMol.end())
+                    ChemIsKnown[i] = false;
+                    ChemMol[i] = 0;
+                    ChemList[i] = ChemBase::getChemPtr(i);
+                }
+
+                _setInnerList(ChemList, ChemIsKnown, ChemMol);
+                _setStreamNum();
+            }
+            StreamBase(const ChemPtrVec& ChemList, const FloatVec& ChemMol)
+            // 모든 화학종의 몰 유량을 알고 있는 경우 사용함.
+            {
+                assert(ChemList.size() == ChemMol.size());
+
+                BoolVec ChemIsKnown(ChemList.size());
+                for (auto i = 0; i < ChemList.size(); ++i)
+                {
+                    ChemIsKnown[i] = true;
+                }
+
+                _setInnerList(ChemList, ChemIsKnown, ChemMol);
+                _setStreamNum();
+            }
+            StreamBase(const IntVec& ChemNumList, const FloatVec& ChemMol)
+            // ChemBase::_chemNum을 활용한 생성자. 모든 화학종의 몰 유량을 알고 있는 경우 사용함.
+            {
+                assert(ChemNumList.size() == ChemMol.size());
+
+                BoolVec ChemIsKnown(ChemNumList.size());
+                ChemPtrVec ChemList(ChemNumList.size());
+                for (auto i = 0; i < ChemNumList.size(); ++i)
+                {
+                    ChemIsKnown[i] = true;
+                    ChemList[i] = ChemBase::getChemPtr(i);
+                }
+
+                _setInnerList(ChemList, ChemIsKnown, ChemMol);
+                _setStreamNum();
+            }
+            StreamBase(const ChemPtrVec& ChemList, const BoolVec ChemIsKnown, const FloatVec& ChemMol)
+            {
+                assert(ChemList.size() == ChemIsKnown.size() && ChemList.size() == ChemMol.size());
+
+                _setInnerList(ChemList, ChemIsKnown, ChemMol);
+            }
+            StreamBase(const ChemPtrVec& ChemList, const std::map<ChemBase*, float>& ChemMolMap)
+            // 일부 화학종의 몰 유량을 알 수 없는 경우 사용함.
+            {
+                BoolVec ChemIsKnown(ChemList.size());
+                FloatVec ChemMol(ChemList.size());
+
+                std::map<ChemBase*, float>::const_iterator it;
+
+                for (auto i = 0; i < ChemList.size(); ++i)
+                {
+                    it = ChemMolMap.find(ChemList[i]);
+                    if (it == ChemMolMap.end())
                     {
-                        _chemMol.insert(*it_chemMol);
-                        toChemIsKnown.second = true;
+                        ChemIsKnown[i] = false;
+                        ChemMol[i] = 0;
                     }
                     else
                     {
-                        toChemIsKnown.second = false;
+                        ChemIsKnown[i] = true;
+                        ChemMol[i] = it->second;
                     }
-                    _chemIsKnown.insert(toChemIsKnown);
                 }
 
-                _setStreamNum();
-            }
-            StreamBase(const std::vector<int>& chemNumList, const std::map<ChemBase*, float>& chemMol)
-            // ChemBase::_chemNum을 활용한 생성자. 일부 화학종의 몰유량을 알 수가 없는 경우 사용함.
-            {
-                std::vector<ChemBase*> chemList;
-                std::map<int, ChemBase*>::const_iterator it;
-                for (auto i : chemNumList)
-                {
-                    it = ChemBase::ChemMap.find(i);
-                    if (it == ChemBase::ChemMap.end()) throw std::runtime_error("wrong ChemBase::_chemNum");
-                    chemList.push_back(it->second);
-                }
-
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                std::map<ChemBase*, float>::const_iterator it_chemMol;
-                for (const auto& chem : chemList)
-                {
-                    toChemIsKnown.first = chem;
-                    
-                    it_chemMol = chemMol.find(chem);
-                    if (it_chemMol != chemMol.end())
-                    {
-                        _chemMol.insert(*it_chemMol);
-                        toChemIsKnown.second = true;
-                    }
-                    else
-                    {
-                        toChemIsKnown.second = false;
-                    }
-                    _chemIsKnown.insert(toChemIsKnown);
-                }
-
-                _setStreamNum();
-            }
-            StreamBase(const std::vector<ChemBase*>& chemList, const std::vector<float>& chemMol)
-            // 모든 화학종의 몰 유량을 알 수 있는 경우 사용함.
-            {
-                assert(chemList.size() == chemMol.size());
-                
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                std::pair<ChemBase*, float> toChemMol;
-                for (auto i = 0; i < chemList.size(); ++i)
-                {
-                    toChemIsKnown.first = toChemMol.first = chemList[i];
-                    toChemIsKnown.second = true;
-                    toChemMol.second = chemMol[i];
-                    _chemIsKnown.insert(toChemIsKnown);
-                    _chemMol.insert(toChemMol);
-                }
-
-                _setStreamNum();
-            }
-            StreamBase(const std::vector<int>& chemNumList, const std::vector<float>& chemMol)
-            // ChemBase::_chemNum을 활용한 생성자. 모든 화학종의 몰 유량을 알 수 있는 경우 사용함.
-            {
-                assert(chemNumList.size() == chemMol.size());
-
-                std::vector<ChemBase*> chemList;
-                std::map<int, ChemBase*>::const_iterator it;
-                for (auto i : chemNumList)
-                {
-                    it = ChemBase::ChemMap.find(i);
-                    if (it == ChemBase::ChemMap.end()) throw std::runtime_error("wrong ChemBase::_chemNum");
-                    chemList.push_back(it->second);
-                }
-
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                std::pair<ChemBase*, float> toChemMol;
-                for (auto i = 0; i < chemList.size(); ++i)
-                {
-                    toChemIsKnown.first = toChemMol.first = chemList[i];
-                    toChemIsKnown.second = true;
-                    toChemMol.second = chemMol[i];
-                    _chemIsKnown.insert(toChemIsKnown);
-                    _chemMol.insert(toChemMol);
-                }
-
-                _setStreamNum();
-            }
-            StreamBase(const std::map<ChemBase*, bool>& chemIsKnown, const std::map<ChemBase*, float>& chemMol)
-            // 일부 화학종의 몰유량을 알 수가 없는 경우 사용함.
-            {
-                _chemIsKnown = chemIsKnown;
-                _chemMol = chemMol;
-
+                _setInnerList(ChemList, ChemIsKnown, ChemMol);
                 _setStreamNum();
             }
             StreamBase(const StreamBase& StreamBaseObj)
+            // 대입 연산자를 위한 생성자.
             {
-                _chemMol = StreamBaseObj._chemMol;
-                _chemIsKnown = StreamBaseObj._chemIsKnown;
+                _ChemList = StreamBaseObj._ChemList;
+                _ChemIsKnown = StreamBaseObj._ChemIsKnown;
+                _ChemMol = StreamBaseObj._ChemMol;
 
                 _setStreamNum();
             }
 
             // getter/setter 정의부
 
-            int getStreamNum() {return _streamNum;}
-            std::map<ChemBase*, float> getChemMol() {return _chemMol;}
-            std::map<ChemBase*, bool> getChemIsKnown() {return _chemIsKnown;}
+            int getStreamNum() {return _StreamNum;}
+            ChemPtrVec getChemList() {return _ChemList;}
+            FloatVec getChemMol() {return _ChemMol;}
+            BoolVec getChemIsKnown() {return _ChemIsKnown;}
             
-            bool addChem(ChemBase* chem)
+            bool addChem(ChemBase* Chem)
             // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
             {
-                std::map<ChemBase*, bool>::const_iterator it_chemIsKnown;
-                it_chemIsKnown = _chemIsKnown.find(chem);
-                if (it_chemIsKnown != _chemIsKnown.end()) return false;
-                
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                toChemIsKnown.first = chem;
-                toChemIsKnown.second = false;
-                _chemIsKnown.insert(toChemIsKnown);
-                
-                return true;
-            }
-            bool addChem(ChemBase* chem, const float& mol)
-            // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
-            {
-                std::map<ChemBase*, bool>::const_iterator it_chemIsKnown;
-                it_chemIsKnown = _chemIsKnown.find(chem);
-                if (it_chemIsKnown != _chemIsKnown.end()) return false;
+                if (!inChemList(Chem)) return false;
 
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                std::pair<ChemBase*, float> toChemMol;
-                toChemIsKnown.first = toChemMol.first = chem;
-                toChemIsKnown.second = false;
-                toChemMol.second = mol;
-                _chemIsKnown.insert(toChemIsKnown);
-                _chemMol.insert(toChemMol);
-
-                return true;
+                return _addChem(Chem, false, 0);
             }
-            bool addChem(const std::vector<ChemBase*>& chemList)
+            bool addChem(const int& ChemNum)
+            // ChemBase::_chemNum을 활용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                if (!inChemList(ChemBase::getChemPtr(ChemNum))) return false;
+
+                return _addChem(ChemBase::getChemPtr(ChemNum), false, 0);
+            }
+            bool addChem(ChemBase* Chem, const float& Mol)
             // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
             {
-                std::map<ChemBase*, bool>::const_iterator it_chemIsKnown;
-                for (const auto& chem : chemList)
+                if (!inChemList(Chem)) return false;
+
+                return _addChem(Chem, true, Mol);
+            }
+            bool addChem(const int& ChemNum, const float& Mol)
+            // ChemBase::_chemNum을 활용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                if (!inChemList(ChemBase::getChemPtr(ChemNum))) return false;
+
+                return _addChem(ChemBase::getChemPtr(ChemNum), true, Mol);
+            }
+            bool addChem(const ChemPtrVec& ChemList)
+            // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                bool res = true;
+                for (auto Chem : ChemList)
                 {
-                    it_chemIsKnown = _chemIsKnown.find(chem);
-                    if (it_chemIsKnown == _chemIsKnown.end()) return false;
+                    if (!addChem(Chem)) res = false;
                 }
 
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                for (const auto& chem : chemList)
+                return res;
+            }
+            bool addChem(const IntVec& ChemNumList)
+            // ChemBase::_chemNum을 활용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                bool res = true;
+                for (auto i : ChemNumList)
                 {
-                    toChemIsKnown.first = chem;
-                    toChemIsKnown.second = false;
-                    _chemIsKnown.insert(toChemIsKnown);
+                    if (!addChem(i)) res = false;
                 }
 
-                return true;
+                return res;
             }
-            bool addChem(const std::vector<ChemBase*>& chemList, const std::map<ChemBase*, float>& chemMol)
+            bool addChem(const ChemPtrVec& ChemList, const FloatVec& ChemMol)
             // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
             {
-                std::map<ChemBase*, bool>::const_iterator it_chemIsKnown;
-                std::map<ChemBase*, float>::const_iterator it_chemMol;
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                for (const auto& chem : chemList)
-                {
-                    it_chemIsKnown = _chemIsKnown.find(chem);
-                    if (it_chemIsKnown == _chemIsKnown.end()) return false;
+                assert(ChemList.size() == ChemMol.size());
 
-                    toChemIsKnown.first = chem;
-                    it_chemMol = chemMol.find(chem);
-                    if (it_chemMol == chemMol.end())
+                bool res = true;
+                for (auto i = 0; i < ChemList.size(); ++i)
+                {
+                    if (!addChem(ChemList[i], ChemMol[i])) res = false;
+                }
+
+                return res;
+            }
+            bool addChem(const IntVec& ChemNumList, const FloatVec& ChemMol)
+            // ChemBase::_chemNum을 활용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                assert(ChemNumList.size() == ChemMol.size());
+
+                bool res = true;
+                for (auto i = 0; i < ChemNumList.size(); ++i)
+                {
+                    if (!addChem(ChemNumList[i], ChemMol[i])) res = false;
+                }
+
+                return res;
+            }
+            bool addChem(const ChemPtrVec& ChemList, const std::map<ChemBase*, float>& ChemMolMap)
+            // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                bool res = true;
+                bool buff;
+                std::map<ChemBase*, float>::const_iterator it;
+                for (auto Chem : ChemList)
+                {
+                    buff = true;
+                    it = ChemMolMap.find(Chem);
+                    if (it == ChemMolMap.end())
                     {
-                        toChemIsKnown.second = false;
-                        _chemIsKnown.insert(toChemIsKnown);
+                        buff = addChem(Chem);
                     }
                     else
                     {
-                        toChemIsKnown.second = true;
-                        _chemIsKnown.insert(toChemIsKnown);
-                        _chemMol.insert(*it_chemMol);
+                        buff = addChem(Chem, it->second);
                     }
+
+                    if (!buff) res = false;
                 }
 
-                return true;
+                return res;
             }
-            bool addChem(const std::map<ChemBase*, bool>& chemIsKnown, const std::map<ChemBase*, float>& chemMol)
+            bool addChem(const ChemPtrVec& ChemList, const BoolVec& ChemIsKnown, const FloatVec& ChemMol)
             // 스트림에 화학종을 추가함. 성공하면 true를 반환함.
-            {
-                std::map<ChemBase*, bool>::const_iterator it_chemIsKnown;
-                std::map<ChemBase*, float>::const_iterator it_chemMol;
-                std::pair<ChemBase*, bool> toChemIsKnown;
-                for (const auto& pair_chemIsKnown : chemIsKnown)
+            {   
+                assert(ChemList.size() == ChemIsKnown.size() && ChemIsKnown.size() == ChemMol.size());
+                bool res = true;
+                bool buff;
+                for (auto i = 0; i < ChemList.size(); ++i)
                 {
-                    it_chemIsKnown = _chemIsKnown.find(pair_chemIsKnown.first);
-                    if (it_chemIsKnown == _chemIsKnown.end()) return false;
+                    buff = true;
+                    if (ChemIsKnown[i]) buff = addChem(ChemList[i], ChemMol[i]);
+                    else buff = addChem(ChemList[i]);
 
-                    it_chemMol = chemMol.find(pair_chemIsKnown.first);
-                    if (it_chemMol == chemMol.end())
-                    {
-                        toChemIsKnown.first = pair_chemIsKnown.first;
-                        toChemIsKnown.second = false;
-                        _chemIsKnown.insert(toChemIsKnown);
-                    }
-                    else
-                    {
-                        toChemIsKnown.first = pair_chemIsKnown.first;
-                        toChemIsKnown.second = true;
-                        _chemIsKnown.insert(toChemIsKnown);
-                        _chemMol.insert(*it_chemMol);
-                    }
-                    
-                    return true;
+                    if (!buff) res = false;
                 }
+
+                return res;
             }
 
-            bool setMol(ChemBase* chem, const float& mol)
-            // 화학종의 몰 유량을 설정함.
+            bool setChemMol(ChemBase* Chem, const float& ChemMol)
+            // 화학종의 몰 유량을 설정함. 성공하면 true를 반환함.
             {
-                std::map<ChemBase*, bool>::const_iterator it_chemIsKnown;
-                it_chemIsKnown = _chemIsKnown.find(chem);
-                if (it_chemIsKnown == _chemIsKnown.end()) return false;
-                else if (it_chemIsKnown->second) _chemMol[chem] = mol;
-                else
-                {
-                    _chemIsKnown[chem] = true;
-                    _chemMol[chem] = mol;
-                }
-                
-                return true;
+                return _setChemMol(Chem, ChemMol);
             }
-            
+            bool setChemMol(const int& ChemNum, const float& ChemMol)
+            // ChemBase::_chemNum을 활용해 화학종의 몰 유량을 설정함. 성공하면 true를 반환함.
+            {
+                return _setChemMol(ChemBase::getChemPtr(ChemNum), ChemMol);
+            }
+            bool setChemMol(const ChemPtrVec& ChemList, const FloatVec& ChemMol)
+            // 화학종의 몰 유량을 설정함. 성공하면 true를 반환함.
+            {
+                assert(ChemList.size() == ChemMol.size());
+
+                bool res = true;
+                for (auto i = 0; i < ChemList.size(); ++i)
+                {
+                    if (!setChemMol(ChemList[i], ChemMol[i])) res = false;
+                }
+
+                return res;
+            }
+            bool setChemMol(const IntVec& ChemNumList, const FloatVec& ChemMol)
+            // ChemBase::_chemNum을 활용해 화학종의 몰 유량을 설정함. 성공하면 true를 반환함.
+            {
+                assert(ChemNumList.size() == ChemMol.size());
+
+                bool res = true;
+                for (auto i = 0; i < ChemNumList.size(); ++i)
+                {
+                    if (!setChemMol(ChemNumList[i], ChemMol[i])) res = false;
+                }
+
+                return res;
+            }
+
+            bool setChemUnknown(ChemBase* Chem)
+            // 화학종의 몰 유량을 미지수로 변경함. 성공하면 true를 반환함.
+            {
+                return _setChemUnknown(Chem);
+            }
+            bool setChemUnknown(const int& ChemNum)
+            // ChemBase::_chemNum을 활용해 화학종의 몰 유량을 미지수로 변경함. 성공하면 true를 반환함.
+            {
+                return _setChemUnknown(ChemBase::getChemPtr(ChemNum));
+            }
+            bool setChemUnknown(const ChemPtrVec& ChemList)
+            // 화학종의 몰 유량을 미지수로 변경함. 성공하면 true를 반환함.
+            {
+                bool res = true;
+                for (auto Chem : ChemList)
+                {
+                    if (!_setChemUnknown(Chem)) res = false;
+                }
+
+                return res;
+            }
+            bool setChemUnknown(const IntVec& ChemNumList)
+            // ChemBase::_chemNum을 활용해 화학종의 몰 유량을 미지수로 변경함. 성공하면 true를 반환함.
+            {
+                bool res = true;
+                for (auto ChemNum : ChemNumList)
+                {
+                    if (!_setChemUnknown(ChemBase::getChemPtr(ChemNum))) res = false;
+                }
+
+                return res;
+            }
+
+            bool delChem(ChemBase* Chem)
+            // 스트림으로부터 화학종을 제거함. 성공하면 true를 반환함.
+            {
+                return _delChem(Chem);
+            }
+            bool delChem(const int& ChemNum)
+            // ChemBase::_chemNum을 활용해 스트림으로부터 화학종을 제거함. 성공하면 true를 반환함.
+            {
+                return _delChem(ChemBase::getChemPtr(ChemNum));
+            }
+            bool delChem(const ChemPtrVec& ChemList)
+            // 스트림으로부터 화학종을 제거함. 성공하면 true를 반환함.
+            {
+                bool res = true;
+                for (auto Chem : ChemList)
+                {
+                    if (!_delChem(Chem)) res = false;
+                }
+
+                return res;
+            }
+            bool delChem(const IntVec& ChemNumList)
+            // ChemBase::_chemNum을 활용해 스트림으로부터 화학종을 제거함. 성공하면 true를 반환함.
+            {
+                bool res = true;
+                for (auto ChemNum : ChemNumList)
+                {
+                    if (!_delChem(ChemBase::getChemPtr(ChemNum))) res = false;
+                }
+
+                return res;
+            }
+
             // 인스턴스 정의부
+
+            bool inChemList(ChemBase* Chem)
+            // _ChemList에 Chem이 있으면 true, 아니면 false를 반환함.
+            {
+                auto it = std::find(_ChemList.begin(), _ChemList.end(), Chem);
+                if (it == _ChemList.end()) return false;
+                else return true;
+            }
 
             
     };
