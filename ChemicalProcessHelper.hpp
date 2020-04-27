@@ -151,7 +151,7 @@ namespace chemprochelper
             {"Ts", 292.0},
             {"Og", 295.0}
         };
-        const std::regex pat_big("~([0-9|.]{0,})([A-Z|a-z|0-9]{1,})");
+        const std::regex pat_big("([0-9|.]{0,})([A-Z|a-z|0-9]{1,})");
         const std::regex pat_sml("([A-Z][a-z]?)(\\d{0,})");
     }
 
@@ -284,6 +284,12 @@ namespace chemprochelper
 
             static auto getChemList() {return _ChemList;}
             static auto getChemPtr(const int& i) {return _ChemList[i];}
+            // 포인터를 Abb를 통해 받고자 하는 경우
+            static auto getChemPtr(const std::string& Abb)
+            {
+                auto idx = functions::getPosition(_AbbList, Abb);
+                return _ChemList[idx];
+            }
             static auto getAbbList() {return _AbbList;}
 
             // 생성자 정의부
@@ -303,10 +309,13 @@ namespace chemprochelper
             auto getChemNum() {return _ChemNum;}
     };
     int ChemBase::_nextChemNum = 0;
+    std::vector<ChemBase*> ChemBase::_ChemList;
+    std::vector<std::string> ChemBase::_AbbList;
 
     class RxnBase
     /*
     화학 반응식을 구성하는 기본 클래스.
+    RxnBase::_EffiMat의 마지막 열은 현재 반응의 총 v(nu) 값과 동일하다.
     주의) 화학 반응식을 Parsing 할때 ChemBase::_Abb과 매칭하는 원리이다.
         ChemBase::_AbbList에 등록되어 있지 않은 형태가 발견될 경우, 
         functions::getPosition 함수로부터 런타임 에러가 발생함.
@@ -331,33 +340,110 @@ namespace chemprochelper
             }
 
             int _RxnNum;
-            std::string _Comment;
+            std::string _Comment = "";
 
             ChemPtrVec _ChemList;
 
             // vi를 저장하는 행렬.
             Eigen::MatrixXf _EffiMat;
 
-            void _parseEqn(const std::string& eqn, std::string* reac, std::string* prod)
-            // eqn을 '='를 중심으로 front와 back으로 쪼갠다.
+            void _setMat(const std::vector<std::string>& eqnList)
+            // 입력된 Eqn을 바탕으로 Mtx를 만듦.
             {
-                auto c_it = std::find(eqn.begin(), eqn.end(), "=");
-                if (c_it == eqn.end()) throw std::runtime_error("invalid chemical equation");
-                
-                reac = &std::string(eqn.begin(), c_it);
-                prod = &std::string(c_it+1, eqn.end());
-            }
+                std::string::iterator it_str;
+                std::string reac, prod;
+                std::vector<std::vector<float>> effiVec;
+                std::vector<std::vector<int>> chemVec;
+                int curEqnIdx = 0;
+                int curChemIdx;
 
-            void _setMat()
-            // 입력된 Eqn이 있는
-            {
+                for (auto eqn : eqnList)
+                {
+                    auto strIdx = eqn.find("=");
+                    if (strIdx == -1) throw std::runtime_error("invalid chemical equation");
 
+                    reac = eqn.substr(0, strIdx);
+                    prod = eqn.substr(strIdx+1);
+
+                    effiVec.push_back(std::vector<float>());
+                    chemVec.push_back(std::vector<int>());
+
+                    std::string effi_s, chem;
+                    float effi;
+                    int idx;
+
+                    // 반응물 부분
+                    for (auto m : functions::_RegexIter(reac, const_variables::pat_big))
+                    {
+                        effi_s = m[1];
+                        if (effi_s == "") effi = 1;
+                        else effi = std::stof(effi_s);
+
+                        chem = m[2];
+
+                        auto ChemPtr = ChemBase::getChemPtr(chem);
+                        
+                        auto it_ChemPtrVec = std::find(_ChemList.begin(), _ChemList.end(), ChemPtr);
+                        if (it_ChemPtrVec != _ChemList.end()) curChemIdx = it_ChemPtrVec - _ChemList.begin();
+                        else
+                        {
+                            _ChemList.push_back(ChemPtr);
+                            curChemIdx = _ChemList.size() - 1;
+                        }
+
+                        std::cout<<curChemIdx<<'\t'<<chem<<"nice\n";
+
+                        effiVec[curEqnIdx].push_back(-1 * effi);
+                        chemVec[curEqnIdx].push_back(curChemIdx);
+                    }
+
+                    // 생성물 부분
+                    for (auto m : functions::_RegexIter(prod, const_variables::pat_big))
+                    {
+                        effi_s = m[1];
+                        if (effi_s == "") effi = 1;
+                        else effi = std::stof(effi_s);
+
+                        chem = m[2];
+
+                        auto ChemPtr = ChemBase::getChemPtr(chem);
+
+                        std::cout<<ChemPtr->getAbb()<<std::endl;
+
+                        auto it_ChemPtrVec = std::find(_ChemList.begin(), _ChemList.end(), ChemPtr);
+                        if (it_ChemPtrVec != _ChemList.end()) curChemIdx = it_ChemPtrVec - _ChemList.begin();
+                        else
+                        {
+                            _ChemList.push_back(ChemPtr);
+                            curChemIdx = _ChemList.size() - 1;
+                        }
+
+                        std::cout<<curChemIdx<<'\t'<<chem<<"nice\n";
+                        
+                        effiVec[curEqnIdx].push_back(effi);
+                        chemVec[curEqnIdx].push_back(curChemIdx);
+                    }
+
+                    ++curEqnIdx;
+                }
+
+                _EffiMat.resize(_ChemList.size(), curEqnIdx);
+                for (auto i = 0; i < curEqnIdx; ++i)
+                {
+                    auto curChemVec = chemVec[i];
+                    auto curEffiVec = effiVec[i];
+                    
+                    for (auto j = 0; j < curChemVec.size(); ++j)
+                    {
+                        _EffiMat(curChemVec[j], i) = curEffiVec[j];
+                    }
+                }
             }
 
         public:
 
             static auto getRxnList() {return _RxnList;}
-            static auto getChemPtr(const int& i) {return _RxnList[i];}
+            static auto getRxnPtr(const int& i) {return _RxnList[i];}
 
             // 생성자 선언부
 
@@ -367,11 +453,43 @@ namespace chemprochelper
             }
             RxnBase(const std::string& eqn)
             {
-                std::string reac, prod;
-                _parseEqn(eqn, &reac, &prod);
+                _setMat({eqn});
+                _setRxnNum();
             }
+            RxnBase(const std::string& eqn, const std::string& comment)
+            {
+                _setMat({eqn});
+                _Comment = comment;
+                _setRxnNum();
+            }
+            RxnBase(const std::vector<std::string>& eqnList)
+            {
+                _setMat(eqnList);
+                _setRxnNum();
+            }
+            RxnBase(const std::vector<std::string>& eqnList, const std::string& comment)
+            {
+                _setMat(eqnList);
+                _Comment = comment;
+                _setRxnNum();
+            }
+            RxnBase(const RxnBase& RxnBaseObj)
+            {
+                _EffiMat = RxnBaseObj._EffiMat;
+                _ChemList = RxnBaseObj._ChemList;
+                _Comment = RxnBaseObj._Comment;
+                _setRxnNum();
+            }
+
+            // setter/getter 선언부
+
+            auto getChemList() {return _ChemList;}
+            auto getEffiMat() {return _EffiMat;}
+            auto getComment() {return _Comment;}
+            void setComment(const std::string& comment) {_Comment = comment;}
     };
     int RxnBase::_nextRxnNum = 0;
+    std::vector<RxnBase*> RxnBase::_RxnList;
 
     class StreamBase
     /*
@@ -389,10 +507,10 @@ namespace chemprochelper
             int _StreamNum;
 
             // 다음 생성자 호출시 부여받는 _StreamNum.
-            static int nextStreamNum;
+            static int _nextStreamNum;
 
             // StreamBase 객체들의 포인터를 저장함.
-            static std::vector<StreamBase*> StreamList;
+            static std::vector<StreamBase*> _StreamList;
 
             ChemPtrVec _ChemList;
 
@@ -406,8 +524,8 @@ namespace chemprochelper
             inline void _setStreamNum()
             // _streamNum을 설정함.
             {
-                _StreamNum = StreamBase::nextStreamNum++;
-                StreamList.push_back(this);
+                _StreamNum = StreamBase::_nextStreamNum++;
+                _StreamList.push_back(this);
             }
 
             inline void _setInnerList(const ChemPtrVec& ChemList,
@@ -470,8 +588,8 @@ namespace chemprochelper
 
         public:
 
-            static auto getStreamList() {return StreamList;}
-            static auto getStreamPtr(const int& i) {return StreamList[i];}
+            static auto getStreamList() {return _StreamList;}
+            static auto getStreamPtr(const int& i) {return _StreamList[i];}
             
             // 생성자 정의부
 
@@ -812,7 +930,8 @@ namespace chemprochelper
 
             
     };
-    int StreamBase::nextStreamNum = 0;
+    int StreamBase::_nextStreamNum = 0;
+    std::vector<StreamBase*> StreamBase::_StreamList;
 
     class ProcObjBase
     /*
@@ -1018,6 +1137,7 @@ namespace chemprochelper
             }
     };
     int ProcObjBase::_nextProcObjNum = 0;
+    std::vector<ProcObjBase*> ProcObjBase::_ProcObjList;
 
     class RxtorBase : public ProcObjBase
     /*
@@ -1072,47 +1192,18 @@ namespace chemprochelper
 
             // 생성자 선언부
 
-            RxtorBase():
-                ProcObjBase() {_setRxtorNum();};
-            
-            RxtorBase(const std::string& name):
-                ProcObjBase(name) {_setRxtorNum();};
-            
-            RxtorBase(const std::string& name, StreamBase* inStream, StreamBase* outStream):
-                ProcObjBase(name, {inStream}, {outStream}) {_setRxtorNum();};
-            
-            RxtorBase(const std::string& name, const int& inStreamNum, const int& outStreamNum):
-                ProcObjBase(name, {inStreamNum}, {outStreamNum}) {_setRxtorNum();};
-            
-            RxtorBase(const std::string& name, StreamBase* inStream, StreamBase* outStream,
-                const std::vector<float>& scalarVec):
-                ProcObjBase(name, {inStream}, {outStream}, scalarVec) {_setRxtorNum();};
-            
-            RxtorBase(const std::string& name, const int& inStreamNum, const int& outStreamNum,
-                const std::vector<float>& scalarVec):
-                ProcObjBase(name, {inStreamNum}, {outStreamNum}, scalarVec) {_setRxtorNum();};
             
             //인스턴스 선언부
 
             bool checkStreamNum()
             // 입력 스트림과 출력 스트림이 모두 1개뿐인지 확인함.
             {
-                if (_inStream.size() == 1 && _outStream.size() == 1) return true;
-                else return false;
+
             }
 
             bool makeChemList()
             // 입력 스트림과 출력 스트림의 물질들을 모두 저장한 _chemList를 생성함. 성공한 경우 true, 실패한 경우 false 반환.
             {
-                if (!checkStreamNum()) false;
-
-                _chemList = std::vector<ChemBase*>();
-                
-                auto inStream = _inStream[0];
-                auto outStream = _outStream[0];
-
-                std::map<ChemBase*, bool>::const_iterator it_bool;
-                std::map<ChemBase*, float>::const_iterator it_float;
 
                 // to be continued.
             }
