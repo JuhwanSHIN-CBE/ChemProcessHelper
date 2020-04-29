@@ -18,6 +18,7 @@ ProcObjBase
 #include <iostream>
 #include <vector>
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <regex>
 #include <algorithm>
@@ -180,7 +181,7 @@ namespace chemprochelper
         };
 
         template<typename T>
-        int getPosition(const std::vector<T>& vector, const T& target)
+        int getVecPos(const std::vector<T>& vector, const T& target)
         // target의 vector 상의 인덱스를 반환함. 만약 target이 vector에 없는 경우 runtime error 발생.
         {
             auto it = std::find(vector.begin(), vector.end(), target);
@@ -188,7 +189,17 @@ namespace chemprochelper
             return it - vector.begin();
         }
 
+        template<typename T>
+        bool inVector(const std::vector<T>& vector, const T& target)
+        // target이 vector에 있으면 true, 아니면 false를 반환한다. 위의 getVecPos와 동일한 구조를 가지고 있음.
+        {
+            auto it = std::find(vector.begin(), vector.end(), target);
+            if (it == vector.end()) return false;
+            else return true;
+        }
+
         auto calMw(const std::string& eqn)
+        // 분자량을 계산하여 반환함. 현재는 괄호는 처리할 수 없음.
         {
             float mw = 0;
             std::string effi_str;
@@ -207,6 +218,7 @@ namespace chemprochelper
         }
 
         auto _combination(int n, int r)
+        // n개 중에서 r개를 뽑는 모든 경우를 반환함.
         {
             assert(n >= r && r > 0);
             std::vector<std::vector<int>> output;
@@ -250,117 +262,178 @@ namespace chemprochelper
     class ChemBase
     /*
     화합물을 구성하는 기본 클래스
-    주의) 이 클래스는 몰질량 등의 정보를 포함하지 않은 클래스이다.
+    이 클래스를 이용해 코드를 구성할 때, 좌측값과 우측값의 특성에 반드시 주의해야 함.
 
-    사용 예시
-    1) ChemBase("H2O");
-    2) ChemBase("Water", "H2O");
+    주의) 이 클래스는 몰질량 등의 정보를 포함하지 않은 클래스이다.
     */
     {
         private:
 
-            // 다음 생성자 호출시 부여받는 _chemNum.
-            static int _nextChemNum;
-
-            // ChemBase 객체들의 포인터를 저장함.
-            static std::vector<ChemBase*> _ChemList;
-
-            // ChemBase 객체들의 _Abb 값을 저장함.
-            static std::vector<std::string> _AbbList;
-
-            inline void _setChemNum()
-            // _ChemNum을 할당함.
-            {
-                _ChemNum = _nextChemNum++;
-                _ChemList.push_back(this);
-                _AbbList.push_back(_Abb);
-            };
-
-            int _ChemNum;
+            // 화합물의 명칭을 저장함.
             std::string _Name;
+
+            //화합물의 축약형을 저장함.
             std::string _Abb;
+
+            // 화합물의 축약형과 그에 해당하는 ChemBase 객체의 포인터를 저장함.
+            static std::unordered_map<std::string, ChemBase*> _AbbMap;
+
+            // ChemBase 객체들의 포인터를 저장함(화합물을 숫자로 대응시키기 위함).
+            static std::vector<ChemBase*> _PtrVec;
 
         public:
 
-            static auto getChemList() {return _ChemList;}
-            static auto getChemPtr(const int& i) {return _ChemList[i];}
-            // 포인터를 Abb를 통해 받고자 하는 경우
-            static auto getChemPtr(const std::string& Abb)
+            // 정적 함수 정의부
+            
+            static auto getChemPtr(const int& i) {return _PtrVec[i];}
+            static auto getChemPtr(const std::string Abb)
             {
-                auto idx = functions::getPosition(_AbbList, Abb);
-                return _ChemList[idx];
+                auto it = _AbbMap.find(Abb);
+                if (it == _AbbMap.end()) throw std::runtime_error("Abb "+Abb+" isn't in ChemBase::_AbbMap");
+                return it->second;
             }
-            static auto getAbbList() {return _AbbList;}
-
+            static bool inAbbMap(const std::string& Abb)
+            // Abb가 _AbbMap의 key로 있는 경우 true를 반환.
+            {
+                auto it = _AbbMap.find(Abb);
+                if (it == _AbbMap.end()) return false;
+                else return true;
+            }
+            static auto getChemIdx(ChemBase* ChemBasePtr)
+            // ChemBasePtr이 ChemBase::_PtrVec의 몇 번째에 위치하는지 반환함.
+            {
+                return functions::getVecPos(_PtrVec, ChemBasePtr);
+            }
+            static auto getChemIdx(const std::string Abb)
+            // Abb을 _Abb으로 가지는 ChemBase 객체의 포인터가 ChemBase::_PtrVec의 몇 번째에 위치하는지 반환함.
+            {
+                auto it = _AbbMap.find(Abb);
+                if (it == _AbbMap.end()) throw std::runtime_error("Abb "+Abb+" isn't in ChemBase::_AbbMap");
+                return functions::getVecPos(_PtrVec, it->second);
+            }
+            
             // 생성자 정의부
 
-            ChemBase():
-                _Name(""), _Abb("") {_setChemNum();};
-            
+            ChemBase() = default;
             ChemBase(const std::string& Abb):
-                _Name(Abb), _Abb(Abb) {_setChemNum();};
+                _Name(Abb), _Abb(_Abb)
+            {
+                auto it = _AbbMap.find(Abb);
+                if (it != _AbbMap.end()) throw std::runtime_error("Abb "+Abb+" is already in ChemBase::_ChemList");
+                _AbbMap[Abb] = this;
+                _PtrVec.push_back(this);
+            }
             ChemBase(const std::string& Name, const std::string& Abb):
-                _Name(Name), _Abb(Abb) {_setChemNum();};
+                _Name(Name), _Abb(Abb)
+            {
+                auto it = _AbbMap.find(Abb);
+                if (it != _AbbMap.end()) throw std::runtime_error("Abb "+Abb+" is already in ChemBase::_ChemList");
+                _AbbMap[Abb] = this;
+                _PtrVec.push_back(this);
+            }
+            
+            // 소멸자 정의부
+
+            ~ChemBase()
+            {
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), this);
+                if (it != _PtrVec.end())   // this가 ChemBase::_AbbMap이나 ChemBase::_PtrVec에 남은 경우 지움.
+                {
+                    _PtrVec.erase(it);
+                    _AbbMap.erase(_Abb);
+                }
+            }
+
+            // 대입 연산자 정의부
+
+            ChemBase& operator=(ChemBase&& other)
+            // other이 우측값인 경우 대입 직후 other이 소멸하므로, ChemBase::_AbbMap과 ChemBase::_PtrVec에 등록된 포인터 주소를 변경함.
+            {
+                _Name = other._Name;
+                _Abb = other._Abb;
+
+                _AbbMap[_Abb] = this;
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), &other);
+                *it = this;
+
+                return *this;
+            }
+
+            ChemBase& operator=(ChemBase& other)
+            // other이 좌측값인 경우 대입 이후에도 other이 잔존하므로, ChemBase::_AbbMap과 ChemBase::_PtrVec을 변경하지 않음.
+            {
+                _Name = other._Name;
+                _Abb = other._Abb;
+
+                return *this;
+            }
 
             // getter 정의부
-            
+
             auto getName() {return _Name;}
             auto getAbb() {return _Abb;}
-            auto getChemNum() {return _ChemNum;}
     };
-    int ChemBase::_nextChemNum = 0;
-    std::vector<ChemBase*> ChemBase::_ChemList;
-    std::vector<std::string> ChemBase::_AbbList;
+    std::unordered_map<std::string, ChemBase*> ChemBase::_AbbMap;
+    std::vector<ChemBase*> ChemBase::_PtrVec;
 
     class RxnBase
     /*
     화학 반응식을 구성하는 기본 클래스.
     RxnBase::_EffiMat의 마지막 열은 현재 반응의 총 v(nu) 값과 동일하다.
-    주의) 화학 반응식을 Parsing 할때 ChemBase::_Abb과 매칭하는 원리이다.
-        ChemBase::_AbbList에 등록되어 있지 않은 형태가 발견될 경우, 
-        functions::getPosition 함수로부터 런타임 에러가 발생함.
     */
     {
         private:
 
-            typedef std::vector<ChemBase*> ChemPtrVec;
-            typedef std::vector<float> FloatVec;
-
-            // 다음 생성자 호출시 부여받는 _RxnNum
-            static int _nextRxnNum;
-
-            // RxnBase 객체들의 포인터를 저장함.
-            static std::vector<RxnBase*> _RxnList;
-
-            inline void _setRxnNum()
-            // _RxnNum을 할당함.
-            {
-                _RxnNum = _nextRxnNum++;
-                _RxnList.push_back(this);
-            }
-
-            int _RxnNum;
+            // 해당 반응식에 대한 간단한 메모를 할 수 있음.
             std::string _Comment = "";
 
-            ChemPtrVec _ChemList;
+            // 반응식에 포함된 화합물(ChemBase 객체)의 인덱스를 저장함.
+            std::vector<int> _ChemIdx;
 
-            // vi를 저장하는 행렬.
+            // 반응식의 v(nu) 값을 저장하는 행렬.
             Eigen::MatrixXf _EffiMat;
 
-            void _setMat(const std::vector<std::string>& eqnList)
-            // 입력된 Eqn을 바탕으로 Mtx를 만듦.
+            // RxnBase 객체들의 포인터를 저장함(반응식을 숫자로 대응시키기 위함).
+            static std::vector<RxnBase*> _PtrVec;
+
+            /*
+            전달받은 화학식을 계수와 화합물의 std::vector로 분리함. effi에는 계수를,
+            chem에는 화합물(ChemBase 객체)의 인덱스(ChemBase::_PtrVec 상 인덱스)를 저장함.
+            direction = true이면 생성물, false이면 반응물로 생각함.
+            */
+            inline void _parseTerm(const std::string& term, const bool& direction,
+                std::vector<float>& effiVec, std::vector<int>& chemVec)
             {
-                std::string::iterator it_str;
+                int sgn;
+                if (direction) sgn = -1;
+                else sgn = 1;
+
+                int chemIdx;
+
+                for (auto m : functions::_RegexIter(term, const_variables::pat_big))
+                {
+                    if (m[1] == "") effiVec.push_back(sgn);
+                    else effiVec.push_back(sgn*std::stof(m[1]));
+                    chemIdx = ChemBase::getChemIdx(m[2]);
+
+                    if (!functions::inVector(_ChemIdx, chemIdx)) _ChemIdx.push_back(chemIdx);
+                    chemVec.push_back(chemIdx);
+                }
+            }
+
+            void _setMat(const std::vector<std::string>& eqnVec)
+            // 전달받은 eqnVec을 바탕으로 this->_EffiMat을 구성함.
+            {
                 std::string reac, prod;
                 std::vector<std::vector<float>> effiVec;
                 std::vector<std::vector<int>> chemVec;
                 int curEqnIdx = 0;
                 int curChemIdx;
 
-                for (auto eqn : eqnList)
+                for (auto eqn : eqnVec)
                 {
                     auto strIdx = eqn.find("=");
-                    if (strIdx == -1) throw std::runtime_error("invalid chemical equation");
+                    if (strIdx == -1) throw std::runtime_error("Invalid chemical Reaction has entered.");
 
                     reac = eqn.substr(0, strIdx);
                     prod = eqn.substr(strIdx+1);
@@ -368,128 +441,474 @@ namespace chemprochelper
                     effiVec.push_back(std::vector<float>());
                     chemVec.push_back(std::vector<int>());
 
-                    std::string effi_s, chem;
-                    float effi;
-                    int idx;
-
                     // 반응물 부분
-                    for (auto m : functions::_RegexIter(reac, const_variables::pat_big))
-                    {
-                        effi_s = m[1];
-                        if (effi_s == "") effi = 1;
-                        else effi = std::stof(effi_s);
-
-                        chem = m[2];
-
-                        auto ChemPtr = ChemBase::getChemPtr(chem);
-                        
-                        auto it_ChemPtrVec = std::find(_ChemList.begin(), _ChemList.end(), ChemPtr);
-                        if (it_ChemPtrVec != _ChemList.end()) curChemIdx = it_ChemPtrVec - _ChemList.begin();
-                        else
-                        {
-                            _ChemList.push_back(ChemPtr);
-                            curChemIdx = _ChemList.size() - 1;
-                        }
-
-                        std::cout<<curChemIdx<<'\t'<<chem<<"nice\n";
-
-                        effiVec[curEqnIdx].push_back(-1 * effi);
-                        chemVec[curEqnIdx].push_back(curChemIdx);
-                    }
+                    _parseTerm(reac, true, effiVec[curEqnIdx], chemVec[curEqnIdx]);
 
                     // 생성물 부분
-                    for (auto m : functions::_RegexIter(prod, const_variables::pat_big))
-                    {
-                        effi_s = m[1];
-                        if (effi_s == "") effi = 1;
-                        else effi = std::stof(effi_s);
-
-                        chem = m[2];
-
-                        auto ChemPtr = ChemBase::getChemPtr(chem);
-
-                        std::cout<<ChemPtr->getAbb()<<std::endl;
-
-                        auto it_ChemPtrVec = std::find(_ChemList.begin(), _ChemList.end(), ChemPtr);
-                        if (it_ChemPtrVec != _ChemList.end()) curChemIdx = it_ChemPtrVec - _ChemList.begin();
-                        else
-                        {
-                            _ChemList.push_back(ChemPtr);
-                            curChemIdx = _ChemList.size() - 1;
-                        }
-
-                        std::cout<<curChemIdx<<'\t'<<chem<<"nice\n";
-                        
-                        effiVec[curEqnIdx].push_back(effi);
-                        chemVec[curEqnIdx].push_back(curChemIdx);
-                    }
+                    _parseTerm(prod, false, effiVec[curEqnIdx], chemVec[curEqnIdx]);
 
                     ++curEqnIdx;
                 }
 
-                _EffiMat.resize(_ChemList.size(), curEqnIdx);
-                for (auto i = 0; i < curEqnIdx; ++i)
+                // _EffiMat 초기화. 마지막 열에는 v(nu) 값의 총합을 입력해야 함.
+                _EffiMat.resize(_ChemIdx.size(), curEqnIdx+1);
+                _EffiMat.setZero();
+
+                // ChemBase::_PtrVec상 인덱스와 _ChemIdx의 인덱스 간 매핑.
+                std::unordered_map<int, int> chemIdxMap;
+                for (auto i = 0; i < _ChemIdx.size(); ++i)
                 {
-                    auto curChemVec = chemVec[i];
-                    auto curEffiVec = effiVec[i];
-                    
-                    for (auto j = 0; j < curChemVec.size(); ++j)
+                    chemIdxMap[_ChemIdx[i]] = i;
+                }
+
+                for (auto j = 0; j < curEqnIdx; ++j)
+                {
+                    auto curChemVec = chemVec[j];
+                    auto curEffiVec = effiVec[j];
+
+                    for (auto i = 0; i < curChemVec.size(); ++i)
                     {
-                        _EffiMat(curChemVec[j], i) = curEffiVec[j];
+                        _EffiMat(chemIdxMap[curChemVec[i]], j) = curEffiVec[i];
                     }
+                }
+
+                // 마지막 열은 v(nu)의 합으로 구성함.
+                for (auto i = 0; i < _EffiMat.cols(); ++i)
+                {
+                    _EffiMat(i, curEqnIdx) = _EffiMat.row(i).sum();
                 }
             }
 
         public:
 
-            static auto getRxnList() {return _RxnList;}
-            static auto getRxnPtr(const int& i) {return _RxnList[i];}
+            // 정적 함수 정의부
 
-            // 생성자 선언부
+            static auto getRxnPtr(const int& i) {return _PtrVec[i];}
 
-            RxnBase()
-            {
-                _setRxnNum();
-            }
+            // 생성자 정의부
+
+            RxnBase() = default;
             RxnBase(const std::string& eqn)
             {
                 _setMat({eqn});
-                _setRxnNum();
+                _PtrVec.push_back(this);
             }
-            RxnBase(const std::string& eqn, const std::string& comment)
+            RxnBase(const std::string& eqn, const std::string& Comment):
+                _Comment(Comment)
             {
                 _setMat({eqn});
-                _Comment = comment;
-                _setRxnNum();
+                _PtrVec.push_back(this);
             }
-            RxnBase(const std::vector<std::string>& eqnList)
+            RxnBase(const std::vector<std::string>& eqnVec)
             {
-                _setMat(eqnList);
-                _setRxnNum();
+                _setMat(eqnVec);
+                _PtrVec.push_back(this);
             }
-            RxnBase(const std::vector<std::string>& eqnList, const std::string& comment)
+            RxnBase(const std::vector<std::string>& eqnVec, const std::string& Comment):
+                _Comment(Comment)
             {
-                _setMat(eqnList);
-                _Comment = comment;
-                _setRxnNum();
-            }
-            RxnBase(const RxnBase& RxnBaseObj)
-            {
-                _EffiMat = RxnBaseObj._EffiMat;
-                _ChemList = RxnBaseObj._ChemList;
-                _Comment = RxnBaseObj._Comment;
-                _setRxnNum();
+                _setMat(eqnVec);
+                _PtrVec.push_back(this);
             }
 
-            // setter/getter 선언부
+            // 소멸자 정의부
 
-            auto getChemList() {return _ChemList;}
-            auto getEffiMat() {return _EffiMat;}
+            ~RxnBase()
+            {
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), this);
+                if (it != _PtrVec.end())    // this가 RxnBase::_PtrVec에 남은 경우 삭제함.
+                {
+                    _PtrVec.erase(it);
+                }
+            }
+
+            // 대입 연산자 정의부
+
+            RxnBase& operator=(RxnBase&& other)
+            // other이 우측값인 경우 대입 직후 other이 소멸하므로, RxnBase::_PtrVec에 등록된 포인터 주소를 변경함.
+            {
+                _Comment = other._Comment;
+                _ChemIdx = other._ChemIdx;
+                _EffiMat = other._EffiMat;
+
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), &other);
+                *it = this;
+
+                return *this;
+            }
+
+            RxnBase& operator=(RxnBase& other)
+            // other이 좌측값인 경우 대입 이후에도 other이 잔존하므로, RxnBase::_PtrVec을 변경하지 않음.
+            {
+                _Comment = other._Comment;
+                _ChemIdx = other._ChemIdx;
+                _EffiMat = other._EffiMat;
+
+                return *this;
+            }
+
+            // getter/setter 정의부
+
             auto getComment() {return _Comment;}
-            void setComment(const std::string& comment) {_Comment = comment;}
+            auto getChemIdx() {return _ChemIdx;}
+            auto getEffiMat() {return _EffiMat;}
+            auto setComment(const std::string& Comment) {_Comment = Comment;}
     };
-    int RxnBase::_nextRxnNum = 0;
-    std::vector<RxnBase*> RxnBase::_RxnList;
+    std::vector<RxnBase*> RxnBase::_PtrVec;
+
+    class _StreamBase
+    /*
+    화학공정흐름도에서 물질의 흐름(flow stream)을 표현하는 클래스.
+    */
+    {
+        private:
+
+            // 흐름을 구성하는 화학종의 ChemBase::_PtrVec 상의 인덱스 값을 저장함.
+            std::vector<int> _ChemIdx;
+
+            // 화학종의 몰 유량이 알려져 있으면 true, 아닌 경우 false를 부여함.
+            std::vector<bool> _ChemMask;
+
+            // 화학종의 몰 유량을 저장함. 몰 유량을 알 수 없는 경우 0을 저장함.
+            std::vector<float> _ChemMol;
+
+            // StreamBase 객체들의 포인터를 저장함(흐름을 숫자로 대응시키기 위함).
+            static std::vector<_StreamBase*> _PtrVec;
+
+            inline bool _addChem(const int& ChemIdx, const bool& ChemMask, const float& ChemMol)
+            // StreamBase 객체에 화학종을 추가함. 성공시 true를 반환함.
+            {
+                if (functions::inVector(_ChemIdx, ChemIdx)) return false;
+
+                _ChemIdx.push_back(ChemIdx);
+                _ChemMask.push_back(ChemMask);
+                _ChemMol.push_back(ChemMol);
+
+                return true;
+            }
+
+            inline bool _addChem(const std::vector<int>& ChemIdx,
+                const std::vector<bool>& ChemMask, const std::vector<float>& ChemMol)
+            // StreamBase 객체에 화학종을 추가함. 성공시 true를 반환함.
+            {
+                bool res = true;
+
+                for (auto i = 0; i < ChemIdx.size(); ++i)
+                {
+                    if (functions::inVector(_ChemIdx, ChemIdx[i])) res = false;
+                    else
+                    {
+                        _ChemIdx.push_back(ChemIdx[i]);
+                        _ChemMask.push_back(ChemMask[i]);
+                        _ChemMol.push_back(ChemMol[i]);
+                    }
+                }
+
+                return res;
+            }
+
+        public:
+
+            // 정적 함수 정의부
+
+            static auto getStreamPtr(const int& i) {return _PtrVec[i];}
+            static auto getStreamIdx(_StreamBase* StreamBasePtr)
+            // StreamasePtr이 StreamBase::_PtrVec의 몇 번째에 위치하는지 반환함.
+            {
+                return functions::getVecPos(_PtrVec, StreamBasePtr);
+            }
+
+            // 생성자 정의부
+
+            _StreamBase() = default;
+            _StreamBase(const std::vector<int>& ChemIdx)
+            // ChemBase::_PtrVec 상의 인덱스를 이용함. 모든 물질의 몰 유량을 모르는 경우.
+            {
+                for (auto i = 0; i < ChemIdx.size(); ++i)
+                {
+                    _ChemIdx.push_back(ChemIdx[i]);
+                    _ChemMask.push_back(false);
+                    _ChemMol.push_back(0);
+                }
+
+                _PtrVec.push_back(this);
+            }
+            _StreamBase(const std::vector<ChemBase*>& ChemVec)
+            // ChemBase 객체를 직접 이용함. 모든 물질의 몰 유량을 모르는 경우.
+            {
+                for (auto i = 0; i < ChemVec.size(); ++i)
+                {
+                    _ChemIdx.push_back(ChemBase::getChemIdx(ChemVec[i]));
+                    _ChemMask.push_back(false);
+                    _ChemMol.push_back(0);
+                }
+
+                _PtrVec.push_back(this);
+            }
+            _StreamBase(const std::vector<int>& ChemIdx, const std::vector<float>& ChemMol)
+            // ChemBase::_PtrVec 상의 인덱스를 이용함. 모든 물질의 몰 유량을 아는 경우.
+            {
+                assert(ChemIdx.size() == ChemMol.size());
+
+                for (auto i = 0; i < ChemIdx.size(); ++i)
+                {
+                    _ChemIdx.push_back(ChemIdx[i]);
+                    _ChemMask.push_back(true);
+                    _ChemMol.push_back(ChemMol[i]);
+                }
+
+                _PtrVec.push_back(this);
+            }
+            _StreamBase(const std::vector<ChemBase*>& ChemVec, const std::vector<float>& ChemMol)
+            // ChemBase 객체를 직접 이용함. 모든 물질의 몰 유량을 아는 경우.
+            {
+                assert(ChemVec.size() == ChemMol.size());
+
+                for (auto i = 0; i < ChemVec.size(); ++i)
+                {
+                    _ChemIdx.push_back(ChemBase::getChemIdx(ChemVec[i]));
+                    _ChemMask.push_back(true);
+                    _ChemMol.push_back(ChemMol[i]);
+                }
+
+                _PtrVec.push_back(this);
+            }
+            _StreamBase(const std::vector<int>& ChemIdx, const std::vector<bool>& ChemMask,
+                const std::vector<float>& ChemMol)
+            // ChemBase::_PtrVec 상의 인덱스를 이용함. 일부 물질의 몰 유량만을 아는 경우.
+            {
+                assert(ChemIdx.size() == ChemMask.size() && ChemMask.size() == ChemMol.size());
+
+                _ChemIdx = ChemIdx;
+                _ChemMask = ChemMask;
+                _ChemMol = ChemMol;
+
+                _PtrVec.push_back(this);
+            }
+            _StreamBase(const std::vector<ChemBase*>& ChemVec, const std::vector<bool>& ChemMask,
+                const std::vector<float>& ChemMol)
+            // ChemBase 객체를 직접 이용함. 일부 물질의 몰 유량만을 아는 경우.
+            {
+                assert(ChemVec.size() == ChemMask.size() && ChemMask.size() == ChemMol.size());
+                
+                _ChemIdx.resize(ChemVec.size());
+                for (auto i = 0; i < ChemVec.size(); ++i)
+                {
+                    _ChemIdx[i] = ChemBase::getChemIdx(ChemVec[i]);
+                }
+
+                _ChemMask = ChemMask;
+                _ChemMol = ChemMol;
+
+                _PtrVec.push_back(this);
+            }
+            _StreamBase(const std::vector<int>& ChemIdx,
+                const std::unordered_map<int, float>& ChemMol)
+            // ChemBase::_PtrVec 상의 인덱스를 이용함. 일부 물질의 몰 유량만을 아는 경우.
+            {
+                _ChemIdx = ChemIdx;
+                _ChemMask.resize(ChemIdx.size());
+                _ChemMol.resize(ChemIdx.size());
+
+                for (auto i = 0; i < ChemIdx.size(); ++i)
+                {
+                    auto it = ChemMol.find(ChemIdx[i]);
+                    if (it == ChemMol.end())
+                    {
+                        _ChemMask[i] = false;
+                        _ChemMol[i] = 0;
+                    }
+                    else
+                    {
+                        _ChemMask[i] = true;
+                        _ChemMol[i] = it->second;
+                    }
+                }
+
+                _PtrVec.push_back(this);
+            }
+            _StreamBase(const std::vector<ChemBase*>& ChemVec,
+                const std::unordered_map<ChemBase*, float>& ChemMol)
+            // ChemBase 객체를 직접 이용함. 일부 물질의 몰 유량만을 아는 경우.
+            {
+                _ChemIdx.resize(ChemVec.size());
+                _ChemMask.resize(ChemVec.size());
+                _ChemMol.resize(ChemVec.size());
+
+                for (auto i = 0; i < ChemVec.size(); ++i)
+                {
+                    _ChemIdx[i] = ChemBase::getChemIdx(ChemVec[i]);
+
+                    auto it = ChemMol.find(ChemVec[i]);
+                    if (it == ChemMol.end())
+                    {
+                        _ChemMask[i] = false;
+                        _ChemMol[i] = 0;
+                    }
+                    else
+                    {
+                        _ChemMask[i] = true;
+                        _ChemMol[i] = it->second;
+                    }
+                }
+
+                _PtrVec.push_back(this);
+            }
+
+            // 소멸자 정의부
+
+            ~_StreamBase()
+            {
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), this);
+                if (it != _PtrVec.end())    // this가 StreamBase::_PtrVec에 남은 경우 삭제함.
+                {
+                    _PtrVec.erase(it);
+                }
+            }
+
+            // 대입 연산자 정의부
+
+            _StreamBase& operator=(_StreamBase&& other)
+            // other이 우측값인 경우 대입 직후 other이 소멸하므로, StreamBase::_PtrVec에 등록된 포인터 주소를 변경함.
+            {
+                _ChemIdx = other._ChemIdx;
+                _ChemMask = other._ChemMask;
+                _ChemMol = other._ChemMol;
+
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), &other);
+                *it = this;
+
+                return *this;
+            }
+
+            _StreamBase& operator=(_StreamBase& other)
+            // other이 좌측값인 경우 대입 이후에도 other이 잔존하므로, StreamBase::_PtrVec을 변경하지 않음.
+            {
+                _ChemIdx = other._ChemIdx;
+                _ChemMask = other._ChemMask;
+                _ChemMol = other._ChemMol;
+
+                return *this;
+            }
+
+            // setter/getter 정의부
+
+            auto getChemIdx() {return _ChemIdx;}
+            auto getChemMask() {return _ChemMask;}
+            auto getChemMol() {return _ChemMol;}
+
+            // 인스턴스 정의부
+
+            bool addChem(const int& ChemIdx)
+            // ChemBase::_PtrVec의 인덱스를 통해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                return _addChem(ChemIdx, false, 0);
+            }
+
+            bool addChem(ChemBase* ChemBasePtr)
+            // ChemBase* 포인터를 이용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                return _addChem(ChemBase::getChemIdx(ChemBasePtr), false, 0);
+            }
+
+            bool addChem(const std::vector<int>& ChemIdx)
+            // ChemBase::_PtrVec의 인덱스를 통해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                std::vector<bool> ChemMask(ChemIdx.size());
+                std::vector<float> ChemMol(ChemIdx.size());
+
+                for (auto i = 0; i < ChemIdx.size(); ++i)
+                {
+                    ChemMask[i] = false;
+                    ChemMol[i] = 0;
+                }
+
+                return _addChem(ChemIdx, ChemMask, ChemMol);
+            }
+
+            bool addChem(const std::vector<ChemBase*>& ChemVec)
+            // ChemBase* 포인터를 이용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                std::vector<int> ChemIdx(ChemVec.size());
+                std::vector<bool> ChemMask(ChemVec.size());
+                std::vector<float> ChemMol(ChemVec.size());
+
+                for (auto i = 0; i < ChemVec.size(); ++i)
+                {
+                    ChemIdx[i] = ChemBase::getChemIdx(ChemVec[i]);
+                    ChemMask[i] = false;
+                    ChemMol[i] = 0;
+                }
+
+                return _addChem(ChemIdx, ChemMask, ChemMol);
+            }
+
+            bool addChem(const std::vector<int>& ChemIdx, const std::vector<float>& ChemMol)
+            // ChemBase::_PtrVec의 인덱스를 통해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                assert(ChemIdx.size() == ChemMol.size());
+
+                std::vector<bool> ChemMask(ChemIdx.size());
+
+                for (auto i = 0; i < ChemIdx.size(); ++i)
+                {
+                    ChemMask[i] = true;
+                }
+
+                return _addChem(ChemIdx, ChemMask, ChemMol);
+            }
+
+            bool addChem(const std::vector<ChemBase*>& ChemVec, const std::vector<float>& ChemMol)
+            // ChemBase* 포인터를 이용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                assert(ChemVec.size() == ChemMol.size());
+
+                std::vector<int> ChemIdx(ChemVec.size());
+                std::vector<bool> ChemMask(ChemVec.size());
+
+                for (auto i = 0; i < ChemVec.size(); ++i)
+                {
+                    ChemIdx[i] = ChemBase::getChemIdx(ChemVec[i]);
+                    ChemMask[i] = true;
+                }
+
+                return _addChem(ChemIdx, ChemMask, ChemMol);
+            }
+
+            bool addChem(const std::vector<int>& ChemIdx, const std::vector<bool>& ChemMask,
+                const std::vector<float>& ChemMol)
+            // ChemBase::_PtrVec의 인덱스를 통해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                assert(ChemIdx.size() == ChemMask.size() && ChemMask.size() == ChemMol.size());
+
+                return _addChem(ChemIdx, ChemMask, ChemMol);
+            }
+
+            bool addChem(const std::vector<ChemBase*>& ChemVec, const std::vector<bool>& ChemMask,
+                const std::vector<float>& ChemMol)
+            // ChemBase* 포인터를 이용해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            {
+                assert(ChemVec.size() == ChemMask.size() && ChemMask.size() == ChemMol.size());
+
+                std::vector<int> ChemIdx(ChemVec.size());
+
+                for (auto i = 0; i < ChemVec.size(); ++i)
+                {
+                    ChemIdx[i] = ChemBase::getChemIdx(ChemVec[i]);
+                }
+
+                return _addChem(ChemIdx, ChemMask, ChemMol);
+            }
+
+            // ChemBase::_PtrVec의 인덱스를 통해 스트림에 화학종을 추가함. 성공하면 true를 반환함.
+            bool addChem(const std::vector<int>& ChemIdx, std::unordered_map<int, float>& ChemMol)
+            {
+                
+            }
+            
+    };
+
+
 
     class StreamBase
     /*
