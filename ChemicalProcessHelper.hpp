@@ -487,23 +487,28 @@ namespace chemprochelper
 
             // 생성자 정의부
 
+            // 디폴트 생성자
             RxnBase() = default;
+
             RxnBase(const std::string& eqn)
             {
                 _setMat({eqn});
                 _PtrVec.push_back(this);
             }
+
             RxnBase(const std::string& eqn, const std::string& Comment):
                 _Comment(Comment)
             {
                 _setMat({eqn});
                 _PtrVec.push_back(this);
             }
+
             RxnBase(const std::vector<std::string>& eqnVec)
             {
                 _setMat(eqnVec);
                 _PtrVec.push_back(this);
             }
+            
             RxnBase(const std::vector<std::string>& eqnVec, const std::string& Comment):
                 _Comment(Comment)
             {
@@ -663,6 +668,7 @@ namespace chemprochelper
 
             // 생성자 정의부
 
+            // 디폴트 생성자
             StreamBase() = default;
 
             // ChemBase::_PtrVec 상의 인덱스를 이용함. 모든 물질의 몰 유량을 모르는 경우.
@@ -1161,278 +1167,170 @@ namespace chemprochelper
     /*
     MixerBase, RxtorBase, SpliterBase의 상위 클래스.
     */
-    {
+   {
         private:
-
-            typedef std::vector<ChemBase*> ChemPtrVec;
-            typedef std::vector<StreamBase*> StreamPtrVec;
-            typedef std::vector<bool> BoolVec;
-            typedef std::vector<float> FloatVec;
-            typedef std::vector <int> IntVec;
-
-            // _ProcObjNum은 0부터 시작함.
-            int _ProcObjNum;
-
-            // 다음 생성자 호출시 부여받는 _ProcObjNum
-            static int _nextProcObjNum;
-
-            // ProcObjBase 객체들의 포인터를 저장함.
-            static std::vector<ProcObjBase*> _ProcObjList;
             
-            StreamPtrVec _inStream;
-            StreamPtrVec _outStream;
+            // 반응기를 구성하는 입력 스트림의 StreamBase::_PtrVec 상의 인덱스 값을 저장함.
+            std::vector<int> _inStreamIdx;
 
-            inline void _setProcObjNum()
-            // _ProcObjNum을 할당함.
-            {
-                _ProcObjNum = _nextProcObjNum++;
-                _ProcObjList.push_back(this);
-            }
+            // 반응기를 구성하는 출력 스트림의 StreamBase::_PtrVec 상의 인덱스 값을 저장함.
+            std::vector<int> _outStreamIdx;
 
-            inline bool _addStream(StreamBase* Stream, const bool& direction)
-            // Stream을 추가함. direction = true이면 in, false이면 out이다. 성공시 true 반환.
-            {
-                if (inStreamList(Stream, direction)) return false;
+            // 반응기 등에 대한 간단함 메모를 할 수 있음.
+            std::string _Comment = "";
 
-                if (direction) _inStream.push_back(Stream);
-                else _outStream.push_back(Stream);
+            // ProcObjBase 객체들의 포인터를 저장함(반응기 등을 숫자로 대응시키기 위함).
+            static std::vector<ProcObjBase*> _PtrVec;
 
-                return true;
-            }
+            /*
+            _inStreamIdx, _outStreamIdx에 있는 정보를 바탕으로,
+            _inChemIdx, _outChemIdx, _inChemMask, _outChemMask, _inChemMol, _outChemMol을 다시 작성함.
+            sync 값이 true인 경우 출력 스트림의 화학종들이 입력 스트림의 화학종을 모두 포함하지 않는 경우,
+                포함하도록 _outChemList를 수정함.
+            */
 
-            inline bool _delStream(StreamBase* Stream, const bool& direction)
-            // Stream을 제거함. direction = true이면 in, false이면 out이다. 성공시 true 반환.
-            {
-                if (!inStreamList(Stream, direction)) return false;
-
-                int idx;
-                if (direction)
-                {
-                    idx = functions::getPosition(_inStream, Stream);
-                    _inStream.erase(_inStream.begin()+idx);
-                }
-                else
-                {
-                    idx = functions::getPosition(_outStream, Stream);
-                    _outStream.erase(_outStream.begin()+idx);
-                }
-                
-                return true;
-            }
-        
         protected:
 
-            // protected 항목에 대해서는 자녀 클래스에서 초기화함.
+            // proctected 항목에 대해서는 자녀 클래스에서 초기화함.
 
-            std::string __Name;
             Eigen::MatrixXf __MainMat;
-            FloatVec __ScalarVec;
-
-            ChemPtrVec __ChemList;
-            BoolVec __ChemIsKnown;
-            FloatVec __ChemMol;
+            std::vector<float> __ScalarVec;
 
         public:
 
-            static auto getProcObjList() {return _ProcObjList;}
-            static auto getProcObjPtr(const int& i) {return _ProcObjList[i];}
+            // 정적 함수 정의부
 
-            // 생성자 선언부
+            static auto getProcObjPtr(const int& i) {return _PtrVec[i];}
 
-            ProcObjBase()
+            // ProcObjBase* 포인터가 _PtrVec 상의 몇 번째에 위치하는지 반환함.
+            static auto getProcObjIdx(ProcObjBase* ProcObjBasePtr)
             {
-                _setProcObjNum();
+                return functions::getVecPos(_PtrVec, ProcObjBasePtr);
             }
-            ProcObjBase(const StreamPtrVec& inStream, const StreamPtrVec& outStream):
-                _inStream(inStream), _outStream(outStream)
-            {
-                _setProcObjNum();
-            }
-            ProcObjBase(const IntVec& inStreamNum, const IntVec& outStreamNum)
-            {
-                StreamPtrVec inStream(inStreamNum.size());
-                StreamPtrVec outStream(outStreamNum.size());
-                for (auto i : inStreamNum) inStream[i] = StreamBase::getStreamPtr(i);
-                for (auto o : outStreamNum) outStream[o] = StreamBase::getStreamPtr(o);
 
-                _inStream = inStream;
-                _outStream = outStream;
+            // 생성자 정의부
+
+            // 디폴트 생성자
+            ProcObjBase() = default;
+
+            // StreamBase::_PtrVec 상의 인덱스를 이용함. 입/출력 스트림이 정의된 경우
+            ProcObjBase(const std::vector<int>& inStreamIdx,
+                const std::vector<int>& outStreamIdx):
+                _inStreamIdx(inStreamIdx), _outStreamIdx(outStreamIdx) {}
+            
+            // StreamBase* 포인터를 이용함. 입/출력 스트림이 정의된 경우
+            ProcObjBase(const std::vector<StreamBase*>& inStreamVec,
+                const std::vector<StreamBase*>& outStreamVec)
+            {
+                std::vector<int> inStreamIdx(inStreamVec.size());
+                std::vector<int> outStreamIdx(outStreamVec.size());
+
+                // for loop 개선할것!!
+                for (auto i = 0; i < inStreamVec.size(); ++i)
+                {
+                    inStreamIdx[i] = StreamBase::getStreamIdx(inStreamVec[i]);
+                }
+
+                for (auto i = 0; i < outStreamVec.size(); ++i)
+                {
+                    outStreamIdx[i] = StreamBase::getStreamIdx(outStreamVec[i]);
+                }
+            }
+
+            // StreamBase::_PtrVec 상의 인덱스를 이용함. 입/출력 스트림이 정의된 경우
+            ProcObjBase(const std::vector<int>& inStreamIdx,
+                const std::vector<int>& outStreamIdx, const std::string& Comment):
+                _inStreamIdx(inStreamIdx), _outStreamIdx(outStreamIdx), _Comment(Comment) {};
+            
+            // StreamBase* 포인터를 이용함. 입/출력 스트림이 정의된 경우
+            ProcObjBase(const std::vector<StreamBase*>& inStreamVec,
+                const std::vector<StreamBase*>& outStreamVec, const std::string& Comment):
+                _Comment(Comment)
+            {
+                std::vector<int> inStreamIdx(inStreamVec.size());
+                std::vector<int> outStreamIdx(outStreamVec.size());
+
+                // for loop 개선할것!!
+                for (auto i = 0; i < inStreamVec.size(); ++i)
+                {
+                    inStreamIdx[i] = StreamBase::getStreamIdx(inStreamVec[i]);
+                }
+
+                for (auto i = 0; i < outStreamVec.size(); ++i)
+                {
+                    outStreamIdx[i] = StreamBase::getStreamIdx(outStreamVec[i]);
+                }
+            }
+
+            // 소멸자 정의부
+
+            ~ProcObjBase()
+            {
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), this);
+                if (it != _PtrVec.end())    // this가 ProcObjBase::_PtrVec에 남은 경우 삭제함.
+                {
+                    _PtrVec.erase(it);
+                }
+            }
+
+            // 대입 연산자 정의부
+
+            // other이 우측값인 경우 대입 직후 other이 소멸하므로, ProcObjBase::_PtrVec에 등록된 포인터를 변경함.
+            ProcObjBase& operator=(ProcObjBase&& other)
+            {
+                _inStreamIdx = other._inStreamIdx;
+                _outStreamIdx = other._outStreamIdx;
+                _Comment = other._Comment;
+
+                __MainMat = other.__MainMat;
+                __ScalarVec = other.__ScalarVec;
+
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), &other);
+                *it = this;
+
+                return *this;
+            }
+
+            // other이 좌측값인 경우 대입 직후에도 other이 잔존하므로, ProcObjBase::_PtrVec을 변경하지 않음.
+            ProcObjBase& operator=(ProcObjBase& other)
+            {
+                _inStreamIdx = other._inStreamIdx;
+                _outStreamIdx = other._outStreamIdx;
+                _Comment = other._Comment;
+
+                __MainMat = other.__MainMat;
+                __ScalarVec = other.__ScalarVec;
             }
 
             // setter/getter 정의부
-
-            auto getName() {return __Name;}
-            auto getInStream() {return _inStream;}
-            auto getOutStream() {return _outStream;}
+            auto getInStreamIdx() {return _inStreamIdx;}
+            auto getOutStreamIdx() {return _outStreamIdx;}
             auto getMainMat() {return __MainMat;}
             auto getScalarVec() {return __ScalarVec;}
-            
-            bool addStream(StreamBase* Stream, const bool& direction)
-            // direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
-            {
-                return _addStream(Stream, direction);
-            }
-            bool addStream(const int& StreamNum, const bool& direction)
-            // StreamBase::_StreamNum을 사용함. direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
-            {
-                return _addStream(StreamBase::getStreamPtr(StreamNum), direction);             
-            }
-            bool addStream(const StreamPtrVec& StreamList, const BoolVec& direction)
-            // direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
-            {
-                assert(StreamList.size() == direction.size());
 
-                bool res = true;
-                for (auto i = 0; i < StreamList.size(); ++i)
-                {
-                    if (!_addStream(StreamList[i], direction[i])) res = false;
-                }
 
-                return res;
-            }
-            bool addStream(const IntVec& StreamNumList, const BoolVec& direction)
-            // StreamBase::_StreamNum을 사용함. direction = true이면 in, false이면 out. 추가에 성공하면 true, 아닌 경우 false 반환.
-            {
-                assert(StreamNumList.size() == direction.size());
-
-                bool res = true;
-                for (auto i = 0; i < StreamNumList.size(); ++i)
-                {
-                    if (!_addStream(StreamBase::getStreamPtr(StreamNumList[i]), direction[i])) res = false;
-                }
-
-                return res;
-            }
-
-            bool delStream(StreamBase* Stream, const bool& direction)
-            // direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
-            {   
-                return _delStream(Stream, direction);
-            }
-            bool delStream(const int& StreamNum, const bool& direction)
-            // StreamBase::_StreamNum을 사용함. direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
-            {
-                return _delStream(StreamBase::getStreamPtr(StreamNum), direction);
-            }
-            bool delStream(const StreamPtrVec& StreamList, const BoolVec& direction)
-            // direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
-            {
-                assert(StreamList.size() == direction.size());
-
-                bool res = true;
-                for (auto i = 0; i < StreamList.size(); ++i)
-                {
-                    if (!_delStream(StreamList[i], direction[i])) res = false;
-                }
-
-                return false;
-            }
-            bool delStream(const IntVec& StreamNumList, const BoolVec& direction)
-            // StreamBase::_StreamNum을 사용함. direction = true이면 in, false이면 out. 제거에 성공하면 ture, 아닌 경우 false 반환.
-            {
-                assert(StreamNumList.size() == direction.size());
-
-                bool res = true;
-                for (auto i = 0; i < StreamNumList.size(); ++i)
-                {
-                    if (!_delStream(StreamBase::getStreamPtr(StreamNumList[i]), direction[i])) res = false;
-                }
-
-                return res;
-            }
-            // 인스턴스 정의부
-
-            bool inStreamList(StreamBase* Stream, bool direction)
-            // Stream을 확인함. direction = true이면 in, false이면 out이다. 이미 존재하는 경우 true 반환.
-            {   
-                StreamPtrVec::const_iterator it;
-                if (direction)
-                {
-                    it = std::find(_inStream.begin(), _inStream.end(), Stream);
-                    if (it == _inStream.end()) return false;
-                }
-                else
-                {
-                    it = std::find(_outStream.begin(), _outStream.end(), Stream);
-                    if (it == _outStream.end()) return false;
-                }
-
-                return true;
-            }
     };
-    int ProcObjBase::_nextProcObjNum = 0;
-    std::vector<ProcObjBase*> ProcObjBase::_ProcObjList;
+    std::vector<ProcObjBase*> ProcObjBase::_PtrVec;
 
     class RxtorBase : public ProcObjBase
     /*
     화학 반응기를 나타내는 클래스. ProcObjBase로부터 상속됨.
-    ProcObjBase에서 화학 반응식 및 몰수지 부분을 추가함.
-    이 클래스는 Eigen 3 라이브러리의 Solver 기능을 사용함.
+    ProcObjBase에서 화학 반응식 및 몰 수지 부분을 추가함.
+    이 클래스는 Eigen 3 라이브러리를 Solver 기능을 사용함.
     INTEL(R) Math Kernel Library, OpenBLAS 등이 있는 경우 CMake를 이용해 속도 향상이 가능함.
     */
-    {   
-        private:
+    {
+        /*
+        ProcObjBase로부터,
 
-            typedef std::vector<ChemBase*> ChemPtrVec;
-            typedef std::vector<StreamBase*> StreamPtrVec;
-            typedef std::vector<bool> BoolVec;
-            typedef std::vector<float> FloatVec;
-            typedef std::vector <int> IntVec;
-
-            /*
-            ProcObjBase로부터 다음과 같은 protected 변수들을 상속받음.
-            std::string __Name;
-            Eigen::MatrixXf __MainMat;
-            FloatVec __ScalarVec;
-            ------------------------------
-            ChemPtrVec __ChemList;
-            BoolVec __ChemIsKnown;
-            FloatVec __ChemMol;
-            */
-
-            // _RxtorNum은 0부터 시작함.
-            int _RxtorNum;
-
-            // 다음 생성자 호출시 부여받는 _RxtorNum
-            static int _nextRxtorNum;
-
-            // RxtorBase 객체들의 포인터를 저장함.
-            static std::vector<RxtorBase*> _RxtorList;
+        Eigen::MatrixXf __MainMat
+        std::vector<float> __ScalarVec
+        
+        두 변수를 상속받음(둘 다 protected 였음).
+        */
             
 
-            inline void _setRxtorNum()
-            {
-                _RxtorNum = _nextRxtorNum++;
-                _RxtorList.push_back(this);
-            }
 
-        public:
-
-            // 다음 생성자 호출시 부여받는  _rxtorNum.
-            static int nextRxtorNum;
-
-            // Rxtorase 객체들의 _rxtorNum과 포인터를 저장함.
-            static std::map<int, RxtorBase*> RxtorMap;
-
-            // 생성자 선언부
-
-            
-            //인스턴스 선언부
-
-            bool checkStreamNum()
-            // 입력 스트림과 출력 스트림이 모두 1개뿐인지 확인함.
-            {
-
-            }
-
-            bool makeChemList()
-            // 입력 스트림과 출력 스트림의 물질들을 모두 저장한 _chemList를 생성함. 성공한 경우 true, 실패한 경우 false 반환.
-            {
-
-                // to be continued.
-            }
-
-            
     };
 }
 
