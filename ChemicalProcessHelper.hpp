@@ -18,6 +18,7 @@ ProcObjBase
 #include <iostream>
 #include <vector>
 #include <map>
+#include <set>
 #include <unordered_map>
 #include <string>
 #include <regex>
@@ -195,6 +196,15 @@ namespace chemprochelper
         {
             auto it = std::find(vector.begin(), vector.end(), target);
             if (it == vector.end()) return false;
+            else return true;
+        }
+
+        // target이 set에 있으면 true, 아니면 false를 반환한다.
+        template<typename T>
+        bool inSet(const std::set<T>& set, const T& target)
+        {
+            auto it = set.find(target);
+            if (it == set.end()) return false;
             else return true;
         }
 
@@ -1223,9 +1233,15 @@ namespace chemprochelper
                 return functions::getVecPos(_PtrVec, ProcObjBasePtr);
             }
 
+            // ProcObjBase 객체들에 연결되는 스트림에 계산 결과들을 입력한다.
+            virtual void solve()
+            {
+
+            }
+
             // 생성자 정의부
 
-            // 디폴트 생성자
+            // 임시 객체를 위한 디폴트 생성자
             ProcObjBase() = default;
 
             // StreamBase::_PtrVec 상의 인덱스를 이용함. 입/출력 스트림이 정의된 경우
@@ -1426,12 +1442,74 @@ namespace chemprochelper
                     }
                 }
             }
+            
+            // 반응식 객체에 대한 몰수지 문제를 해결함.
+            inline void _solve()
+            {
+                StreamBase* inStreamPtr = StreamBase::getStreamPtr(getInStreamIdx()[0]);
+                StreamBase* outStreamPtr = StreamBase::getStreamPtr(getOutStreamIdx()[0]);
+                RxnBase* RxnPtr = RxnBase::getRxnPtr(_RxnIdx);
+
+                auto RxnEffiMat = RxnPtr->getEffiMat();
+                auto RxnChemIdx = RxnPtr->getChemIdx();
+                auto inStrChemIdx = inStreamPtr->getChemIdx();
+                
+                // _ChemIdx에 입력 스트림과 출력 스트림의 화합물들을 다 저장함.
+                _ChemIdx = inStreamPtr->getChemIdx();
+                for (auto idx : outStreamPtr->getChemIdx())
+                {
+                    if (!functions::inVector(_ChemIdx, idx)) _ChemIdx.push_back(idx);
+                }                
+                for (auto idx : RxnChemIdx)
+                {
+                    if (!functions::inVector(_ChemIdx, idx)) throw std::runtime_error("StreamBase object can't cover RxnBase object");
+                }
+
+                // __MainMat의 크기를 맞춤.
+                int rows = _ChemIdx.size() + inStrChemIdx.size();
+                int cols = _ChemIdx.size() + RxnEffiMat.cols() - 1;
+
+                __MainMat.resize(rows, cols);
+                __MainMat.setZero();                
+
+                for (auto i = 0; i < _ChemIdx.size(); ++i)
+                {
+                    auto& idx = _ChemIdx[i];
+
+                    // 단위행렬 부분의 값을 설정함.
+                    __MainMat(i, i) = 1;
+
+                    // 우측 상단 부분의 값을 결정함.
+                    if (functions::inVector(RxnChemIdx, idx))   // 반응에 참여하는 화학종의 경우
+                    {
+                        for (auto j = 0; j < RxnEffiMat.cols() - 1; ++j)
+                        {
+                            __MainMat(i, _ChemIdx.size() + j) = -1 * RxnEffiMat(functions::getVecPos(RxnChemIdx, idx), j);
+                        }
+                    }                  
+                }
+
+                // 우측 하단 부분의 값을 결정함.
+                for (auto i = 0; i < inStrChemIdx.size(); ++i)
+                {
+                    auto& idx = inStrChemIdx[i];
+
+                    if (functions::inVector(RxnChemIdx, idx))   // 반응에 참여하는 경우
+                    {
+                        for (auto j = 0; j < RxnEffiMat.cols() - 1; ++j)
+                        {
+                            __MainMat(_ChemIdx.size() + i, _ChemIdx.size() + j) = -1 * RxnEffiMat(functions::getVecPos(RxnChemIdx, idx), j);
+                        }
+                    }
+                }
+            }
 
         
         public:
 
             // 생성자 정의부
 
+            // 임시 객체를 위한 생성자
             RxtorBase():
                 ProcObjBase() {}
 
@@ -1439,7 +1517,6 @@ namespace chemprochelper
             RxtorBase(const int& inStreamIdx, const int& outStreamIdx, const int& RxnIdx):
                 ProcObjBase(std::vector<int>(1, inStreamIdx), std::vector<int>(1, outStreamIdx)), _RxnIdx(RxnIdx)
             {
-                _setMainMat();
                 _PtrVec.push_back(this);
             }
 
@@ -1448,7 +1525,6 @@ namespace chemprochelper
                 ProcObjBase(std::vector<StreamBase*>(1, inStreamPtr), std::vector<StreamBase*>(1, outStreamPtr)),
                 _RxnIdx(RxnBase::getRxnIdx(RxnPtr))
             {
-                _setMainMat();
                 _PtrVec.push_back(this);
             }
 
@@ -1457,7 +1533,6 @@ namespace chemprochelper
                 const int& RxnIdx, const std::string& Comment):
                 ProcObjBase(std::vector<int>(1, inStreamIdx), std::vector<int>(1, outStreamIdx), Comment), _RxnIdx(RxnIdx)
             {
-                _setMainMat();
                 _PtrVec.push_back(this);
             }
 
@@ -1467,11 +1542,146 @@ namespace chemprochelper
                 ProcObjBase(std::vector<StreamBase*>(1, inStreamPtr), std::vector<StreamBase*>(1, outStreamPtr), Comment),
                 _RxnIdx(_RxnIdx)
             {
-                _setMainMat();
                 _PtrVec.push_back(this);
+            }
+
+            // 대입 연산자 정의부
+
+            // other이 우측값인 경우 대입 직후 other이 소멸하므로 RxtorBase::_PtrVec에 등록된 포인터의 값을 변경함.
+            RxtorBase& operator=(RxtorBase&& other)
+            {
+                _RxnIdx = other._RxnIdx;
+                _ChemIdx = other._ChemIdx;
+                ProcObjBase::operator=(other);
+
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), &other);
+                *it = this;
+
+                return *this;
+            }
+
+            // other이 좌측값인 경우 대입 직후에도 other이 잔존하므로, RxtorBase::_PtrVec을 변경하지 않음.
+            RxtorBase& operator=(RxtorBase& other)
+            {
+                _RxnIdx = other._RxnIdx;
+                _ChemIdx = other._ChemIdx;
+                ProcObjBase::operator=(other);
+
+                return *this;
             }
     };
     std::vector<RxtorBase*> RxtorBase::_PtrVec;
+
+    class SpliterBase : public ProcObjBase
+    /*
+    Spliter를 나타내는 클래스. ProcObjBase로부터 상속됨.
+
+    */
+    {
+
+    };
+
+    class MixerBase : public ProcObjBase
+    /*
+    Mixer를 나타내는 클래스. ProcObjBase로부터 상속됨.
+    ProcObjBase에서 몰수지 부분을 추가함.
+    */
+    {
+        private:
+
+            // MixerBase 객체들의 포인터를 저장함(믹서를 숫자에 대응시키기 위함.)
+            static std::vector<MixerBase*> _PtrVec;
+
+            // 혼합기와 연관된 화학물질(ChemBase)들의 ChemBase::_PtrVec 상의 인덱스를 저장함.
+            std::vector<int> _ChemIdx;
+
+            // 출력 스트림에 포함된 모든 화학종이 입력 스트림의 모든 화학종과 동일한지 확인함.
+            bool __checkStreamValid()
+            {
+                std::set<int> inChemSet;
+                std::set<int> outChemSet;
+
+                for (auto inStreamIdx : getInStreamIdx())
+                {
+                    for (auto inChemIdx : StreamBase::getStreamPtr(inStreamIdx)->getChemIdx())
+                    {
+                        if (!functions::inSet(inChemSet, inChemIdx)) inChemSet.insert(inChemIdx);
+                    }
+                }
+
+                for (auto outStreamIdx : getOutStreamIdx())
+                {
+                    for (auto outChemIdx : StreamBase::getStreamPtr(outStreamIdx)->getChemIdx())
+                    {
+                        if (!functions::inSet(outChemSet, outChemIdx)) outChemSet.insert(outChemIdx);
+                    }
+                }
+
+                return (inChemSet == outChemSet);
+            }
+
+        
+        public:
+
+            // 생성자 정의부
+
+            // 임시 객체를 위한 생성자.
+            MixerBase():
+                ProcObjBase() {}
+            
+            // StreamBase::_PtrVec 상의 인덱스를 사용함. 입/출력 스트림이 정의된 경우.
+            MixerBase(const std::vector<int>& inStreamIdx, const int& outStreamIdx):
+                ProcObjBase(inStreamIdx, std::vector<int>(1, outStreamIdx))
+            {
+                _PtrVec.push_back(this);
+            }
+
+            // StreamBase* 포인터를 이용함. 입/출력 스트림이 정의된 경우
+            MixerBase(const std::vector<StreamBase*>& inStreamPtr, StreamBase* outStreamPtr):
+                ProcObjBase(inStreamPtr, std::vector<StreamBase*>(1, outStreamPtr))
+            {
+                _PtrVec.push_back(this);
+            }
+
+            // StreamBase::_PtrVec 상의 인덱스를 사용함. 입/출력 스트림이 정의된 경우.
+            MixerBase(const std::vector<int>& inStreamIdx, const int& outStreamIdx,
+                const std::string& Comment):
+                ProcObjBase(inStreamIdx, std::vector<int>(1, outStreamIdx), Comment)
+            {
+                _PtrVec.push_back(this);
+            }
+
+            // StreamBase* 포인터를 이용함. 입/출력 스트림이 정의된 경우
+            MixerBase(const std::vector<StreamBase*>& inStreamPtr, StreamBase* outStreamPtr,
+                const std::string& Comment):
+                ProcObjBase(inStreamPtr, std::vector<StreamBase*>(1, outStreamPtr), Comment)
+            {
+                _PtrVec.push_back(this);
+            }
+
+            // other이 우측값인 경우 대입 직후 other이 소멸하므로, MixerBase::_PtrVec에 등록된 포인터 주소를 변경함.
+            MixerBase& operator=(MixerBase&& other)
+            {
+                _ChemIdx = other._ChemIdx;
+                ProcObjBase::operator=(other);
+
+                auto it = std::find(_PtrVec.begin(), _PtrVec.end(), &other);
+                *it = this;
+
+                return *this;
+            }
+
+            // other이 좌측값인 경우 대입 이후에도 other이 잔존하므로, StreamBase::_PtrVec을 변경하지 않음.
+            MixerBase& operator=(MixerBase& other)
+            {
+                _ChemIdx = other._ChemIdx;
+                ProcObjBase::operator=(other);
+
+                return *this;
+            }
+
+
+    };
 }
 
 #endif
