@@ -22,6 +22,7 @@ ProcObjBase
 #include <unordered_map>
 #include <string>
 #include <regex>
+#include <sstream>
 #include <algorithm>
 
 // 이 헤더는 Eigen 3 라이브러리를 필수적으로 요구함.
@@ -155,6 +156,7 @@ namespace chemprochelper
         };
         const std::regex pat_big("([0-9|.]{0,})([A-Z|a-z|0-9]{1,})");
         const std::regex pat_sml("([A-Z][a-z]?)(\\d{0,})");
+        const std::regex pat_bra(R"(([A-Z][a-z]?|\((?:[^()]*(?:\(.*\))?[^()]*)+\))(\d*))");
     }
     
     // 주요 서브루틴들을 포함함.
@@ -275,6 +277,179 @@ namespace chemprochelper
                 }
                 return output;
             }
+        }
+
+        // 화학식으로부터 원자 조성을 추출함.
+        std::unordered_map<std::string, int> _getElemComp(const std::string& chem)
+        {
+            std::unordered_map<std::string, int> elemIdx, buff;
+
+            int effi;
+            std::string elem;
+
+            for (auto m : _RegexIter(chem, const_variables::pat_bra))
+            {
+                if (m[2] == "") effi = 1;
+                else effi = std::stoi(m[2]);
+
+                elem = m[1];
+                if (elem[0] == '(')
+                {
+                    buff = _getElemComp(elem);
+
+                    for (auto pair : buff)
+                    {
+                        pair.second *= effi;
+
+                        if (inMap(elemIdx, pair.first))
+                        {
+                            elemIdx[pair.first] += pair.second;
+                        }
+                        else
+                        {
+                            elemIdx.insert(pair);
+                        }
+                    }
+                }
+                else
+                {
+                    if (inMap(elemIdx, elem)) elemIdx[elem] += effi;
+                    else elemIdx[elem] = effi;
+                }
+            }
+
+            return elemIdx;
+        }
+
+        // 균형 잡힌 화학식을 반환함.
+        std::string _balRxnEqn(const std::string& eqn)
+        {
+            auto strIdx = eqn.find("=");
+            if (strIdx == -1) throw std::runtime_error("Invalid chemical Reaction has entered.");
+
+            std::string reac = eqn.substr(0, strIdx);
+            std::string prod = eqn.substr(strIdx + 1);
+
+            std::vector<std::string> reacVec, prodVec;
+
+            std::vector<std::unordered_map<std::string, int>> reacIdx, prodIdx;
+
+            std::unordered_map<std::string, int> chemIdx, buff;
+            
+            // 반응물 부분
+            for (const auto& m : _RegexIter(reac, const_variables::pat_big))
+            {
+                reacVec.push_back(m[2]);
+                buff = _getElemComp(m[2]);
+
+                printf("Reactant : %s\n", m[2].str().c_str());
+                
+                for (const auto& pair : buff)
+                {
+                    if (!inMap(chemIdx, pair.first)) chemIdx[pair.first] = chemIdx.size();
+                }
+
+                reacIdx.push_back(buff);
+            }
+
+            // 생성물 부분
+            for (const auto& m : _RegexIter(prod, const_variables::pat_big))
+            {
+                prodVec.push_back(m[2]);
+                buff = _getElemComp(m[2]);
+
+                printf("Product : %s\n", m[2].str().c_str());
+
+                for (const auto& pair : buff)
+                {
+                    if (!inMap(chemIdx, pair.first)) chemIdx[pair.first] = chemIdx.size();
+                }
+
+                prodIdx.push_back(buff);
+            }
+
+            std::printf("The size of reacIdx is %d\n", reacIdx.size());
+            std::printf("The size of prodIdx is %d\n", prodIdx.size());
+
+            Eigen::MatrixXf mat(chemIdx.size(), reacVec.size() + prodVec.size());
+            mat.setZero();
+            Eigen::VectorXf ans(chemIdx.size());
+            ans.setZero();
+
+            // 반응물 부분
+            for (auto j = 0; j < reacIdx.size(); ++j)
+            {
+                for (const auto& pair : reacIdx[j])
+                {
+                    mat(chemIdx[pair.first], j) = pair.second;
+                }
+            }
+
+            // 생성물 부분
+            for (auto j = 0; j < prodIdx.size(); ++j)
+            {
+                for (const auto& pair : prodIdx[j])
+                {
+                    mat(chemIdx[pair.first], j + reacVec.size()) = -1 * pair.second;
+                }
+            }
+
+            ans = -1 * mat.col(0);
+
+            mat.block(0,0,mat.rows(), mat.cols()-1) = mat.block(0,1,mat.rows(),mat.cols()-1);
+            mat.conservativeResize(mat.rows(), mat.cols()-1);
+
+            Eigen::VectorXf res = mat.colPivHouseholderQr().solve(ans);
+
+            res.conservativeResize(res.size() + 1);
+            for (auto i = res.size() - 1; i > 0; --i) res[i] = res[i-1];
+            res[0] = 1;
+
+            std::stringstream ss;
+            ss.precision(2);    // 소수점 아래 둘째 자리까지만 남김.
+
+            reac.clear();
+            prod.clear();
+
+            for (auto i = 0; i < reacVec.size(); ++i)
+            {
+                if (abs(res[i] - 1) < 0.01)
+                {
+                    reac.append(reacVec[i]);
+                }
+                else
+                {
+                    ss << res[i];
+                    reac.append(ss.str());
+                    reac.append(reacVec[i]);
+                }
+                reac.append(" + ");
+            }
+            ss.str("");
+
+            for (auto i = 0; i < prodVec.size(); ++i)
+            {
+                if (abs(res[i+reacVec.size()] - 1) < 0.01)
+                {
+                    prod.append(prodVec[i]);
+                }
+                else
+                {
+                    ss << res[i+reacVec.size()];
+                    prod.append(ss.str());
+                    prod.append(prodVec[i]);
+                }
+                prod.append(" + ");
+            }
+            ss.str("");
+
+            reac.erase(reac.end()-3, reac.end());
+            prod.erase(prod.end()-3, prod.end());
+            
+            reac.append(" = ");
+            reac.append(prod);
+
+            return reac;
         }
     }
 
