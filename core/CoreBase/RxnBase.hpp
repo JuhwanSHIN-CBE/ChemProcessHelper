@@ -1,8 +1,21 @@
+/*
+core/CoreBase/RxnBase.hpp
+-------------------------
+화학 반응식 표현의 기초가 되는 RxnBase 클래스를 정의함.
+*/
+#ifndef _CHEMPROCHELPER_RXNBASE
+#define _CHEMPROCHELPER_RXNBASE
+
 namespace chemprochelper
 {
     /*
     화학 반응식을 구성하는 기본 클래스.
-    RxnBase::_EffiMat의 마지막 열은 현재 반응의 총 v(nu) 값과 동일하다.
+    --------------------------------
+    RxnBase는 다음과 같은 멤버 변수를 가짐.
+    private:
+        _Comment : 해당 객체에 대한 설명을 저장함.
+        _ChemIdx : 해당 객체에 연관된 ChemBase 객체들의 포인터를 저장함.
+        _EffiMat : 화학 반응식을 행렬로 변환해 저장함. 마지막 열은 nu의 총합과 동일함.
     */
     class RxnBase
     {
@@ -110,3 +123,5 @@ namespace chemprochelper
             auto getEffiMat() {return _EffiMat;}
     };
 } // namespace chemprochelper
+
+#endif

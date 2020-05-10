@@ -17,6 +17,13 @@ ChemBase
 #ifndef _CHEMPROCHELPER_
 #define _CHEMPROCHELPER_
 
+/*
+행렬연산이 필요한 경우,
+#include _INCLUDE_CHEMPROCHELPER_SOLVER
+를 꼭 써줄것!
+(컴파일 타임이 길어져서 별도 옵션으로 분리함.)
+*/
+
 // 표준 라이브러리
 #include <iostream>
 #include <vector>
@@ -39,13 +46,11 @@ INTEL(R) MKL 등이 있는 경우 CMake를 이용할 것.
 이 라이브러리는 boost 라이브러리를 필수로 요구함.
 https://www.boost.org/ 참조.
 */
-#include <Eigen/Dense>
+#include <boost/numeric/odeint.hpp>
 
 // 내부 헤더 파일 연결부
 #include "core/Internal.hpp"
-#include "core/ChemBase.hpp"
-#include "core/RxnBase.hpp"
-#include "core/StreamBase.hpp"
-#include "core/ProcObjBase.hpp"
+#include "core/CoreBase.hpp"
+#include "core/RxtorFamily.hpp"
 
 #endif

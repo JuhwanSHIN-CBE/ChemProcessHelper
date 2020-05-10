@@ -1,3 +1,6 @@
+#ifndef _CHEMPROCHELPER_INTERNAL
+#define _CHEMPROCHELPER_INTERNAL
+
 namespace chemprochelper
 {
     // 주요 상수들 혹은 변수들을 포함함.
@@ -291,6 +294,8 @@ namespace chemprochelper
             return elemIdx;
         }
 
+        #ifdef _INCLUDE_CHEMPROCHELPER_SOLVER
+
         // 균형 잡힌 화학식을 반환함.
         std::string _balRxnEqn(const std::string& eqn)
         {
@@ -421,5 +426,9 @@ namespace chemprochelper
 
             return reac;
         }
+
+        #endif
     }
 }
+
+#endif

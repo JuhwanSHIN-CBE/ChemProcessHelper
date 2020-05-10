@@ -1,8 +1,22 @@
+/*
+core/CoreBase/StreamBase.hpp
+----------------------------
+공정흐름도에서 물질 스트림을 표현하는 StreamBase 클래스를 정의함.
+*/
+#ifndef _CHEMPROCHELPER_STREAMBASE
+#define _CHEMPROCHELPER_STREAMBASE
+
 namespace chemprochelper
 {
     class StreamBase
     /*
     화학공정흐름도에서 물질의 흐름(flow stream)을 표현하는 클래스.
+    ----------------------------------------------------------
+    StreamBase는 다음과 같은 멤버 변수를 가짐.
+    private:
+        _ChemIdx : 해당 객체에 연관된 ChemBase 객체들의 포인터를 저장함.
+        _ChemMask : 해당 화학종의 몰 유량을 알고 있는지의 여부를 저장함.
+        _ChemMol : 해당 화학종의 몰 유량을 저장함.
     */
     {
         private:
@@ -328,3 +342,5 @@ namespace chemprochelper
             }
     };
 } // namespace chemprochelper
+
+#endif

@@ -1,10 +1,20 @@
+/*
+core/CoreBase/ChemBase.hpp
+--------------------------
+화합물의 기초가 되는 ChemBase 클래스를 정의함.
+*/
+#ifndef _CHEMPROCHELPER_CHEMBASE
+#define _CHEMPROCHELPER_CHEMBASE
+
 namespace chemprochelper
 {
     /*
     화합물을 지정하는 기본 클래스
-    이 클래스를 이용해 코드를 구성할 때, 좌측값과 우측값의 특성에 반드시 주의해야 함.
-
-    주의) 이 클래스는 몰질량 등의 정보를 포함하지 않은 클래스이다.
+    ---------------------------
+    ChemBase는 다음과 같은 멤버 변수를 가짐.
+    private:
+        _Name : 화학종의 이름을 저장함.
+        _Abb : 화학종의 축약형을 저장함.
     */
     class ChemBase
     {
@@ -96,6 +106,21 @@ namespace chemprochelper
                 if (it == _AbbMap.end()) return false;
                 else return true;
             }
+
+            // iostream 지원을 위한 함수
+            std::string getString() const
+            {
+                std::string retVal = "Name : " + _Name + ", Abb : " + _Abb;
+                return retVal;
+            }
     };
     std::unordered_map<std::string, ChemBase*> ChemBase::_AbbMap;
+
+    std::ostream& operator<<(std::ostream& os, const ChemBase& obj)
+    {
+        os << obj.getString();
+        return os;
+    }
 } // namespace chemprochelper
+
+#endif

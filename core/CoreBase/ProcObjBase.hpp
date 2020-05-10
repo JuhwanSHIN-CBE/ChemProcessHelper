@@ -1,7 +1,25 @@
+/*
+core/CoreBase/ProcObjBase.hpp
+-----------------------------
+반응기, 분리기 등의 기초가 되는 ProcObjBase 클래스를 정의함.
+*/
+#ifndef _CHEMPROCHELPER_PROCOBJBASE
+#define _CHEMPROCHELPER_PROCOBJBASE
+
 namespace chemprochelper
 {
     /*
     MixerBase, RxtorBase, SpliterBase의 상위 클래스.
+    -----------------------------------------------
+    ProcObjBase는 다음과 같은 멤버 변수를 가짐.
+    private:
+        _inStreamIdx : 입력 스트림의 포인터를 저장
+        _outStreamIdx : 출력 스트림의 포인터를 저장.
+        _Comment : 해당 객체에 대한 설명을 저장함.
+    protected:
+        __ChemIdx : 해당 객체에 연관된 ChemBase 객체들의 포인터를 저장함.
+        __ScalarVec : 반응별 전화율, 화합물 별 분리비 등을 저장함.
+        __MainMat : 반응기, 분리기 등에서 필요한 행렬을 저장함.
     */
     class ProcObjBase
     {
@@ -55,3 +73,5 @@ namespace chemprochelper
             auto getMainMat() {return __MainMat;}
     };
 } // namespace chemprochelper
+
+#endif

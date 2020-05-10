@@ -85,6 +85,15 @@
         "qr": "cpp",
         "svd": "cpp",
         "set": "cpp",
-        "dense": "cpp"
+        "dense": "cpp",
+        "strstream": "cpp",
+        "chrono": "cpp",
+        "iomanip": "cpp",
+        "numeric": "cpp",
+        "ratio": "cpp",
+        "thread": "cpp",
+        "cinttypes": "cpp",
+        "typeindex": "cpp",
+        "variant": "cpp"
     }
 }
