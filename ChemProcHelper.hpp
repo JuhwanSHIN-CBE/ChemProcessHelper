@@ -34,6 +34,7 @@ ChemBase
 #include <sstream>
 #include <algorithm>
 #include <set>
+#include <functional>
 
 /*
 이 라이브러리는 Eigen 3 라이브러리를 필수로 요구함.
@@ -53,5 +54,6 @@ https://www.boost.org/ 참조.
 #include "core/CoreBase.hpp"
 #include "core/RxtorFamily.hpp"
 #include "core/FlowManagerFamily.hpp"
+#include "core/RxnFamily.hpp"
 
 #endif
