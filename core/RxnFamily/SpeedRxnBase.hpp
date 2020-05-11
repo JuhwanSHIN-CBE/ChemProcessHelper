@@ -19,9 +19,9 @@ namespace chemprochelper
     {
         public:
             
-            // 화학 반응 속도식을 저장함.
             
-    }
+
+    };
 } // namespace chemprochelper
 
 

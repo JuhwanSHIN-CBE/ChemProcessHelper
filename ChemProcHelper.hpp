@@ -35,6 +35,7 @@ ChemBase
 #include <algorithm>
 #include <set>
 #include <functional>
+#include <cmath>
 
 /*
 이 라이브러리는 Eigen 3 라이브러리를 필수로 요구함.

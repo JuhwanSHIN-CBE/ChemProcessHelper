@@ -18,6 +18,7 @@ namespace chemprochelper
         _Comment : 해당 객체에 대한 설명을 저장함.
     protected:
         __ChemIdx : 해당 객체에 연관된 ChemBase 객체들의 포인터를 저장함.
+        __ChemMol : 해당 객체에 연관된 ChemBase 객체들의 몰수를 저장함.
         __ScalarVec : 반응별 전화율, 화합물 별 분리비 등을 저장함.
         __MainMat : 반응기, 분리기 등에서 필요한 행렬을 저장함.
     */
@@ -38,6 +39,9 @@ namespace chemprochelper
 
             // 반응기 등을 구성하는 화합물들의 포인터를 저장함.
             std::vector<ChemBase*> __ChemIdx;
+
+            // 반응기 등에 포함된 화합물의 몰수를 저장함.
+            std::vector<float> __ChemMol;
             
             // 반응기 등에서 중요한 정보들(전화율 등)을 저장함. 자녀 클래스마다 저장하는 값이 다름.
             std::vector<float> __ScalarVec;

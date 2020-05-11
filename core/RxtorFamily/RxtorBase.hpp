@@ -21,8 +21,9 @@ namespace chemprochelper
         ProcObjBase로부터,
 
         std::vector<ChemBase*> __ChemIdx;
-        Eigen::MatrixXf __MainMat
-        std::vector<float> __ScalarVec
+        std::vector<float> __ChemMol;
+        Eigen::MatrixXf __MainMat;
+        std::vector<float> __ScalarVec;
         
         세 변수를 상속받음(모두 protected)
         */
@@ -105,11 +106,36 @@ namespace chemprochelper
             // StreamBase* 포인터를 이용함. 입/출력 스트림이 정의된 경우
             RxtorBase(StreamBase* inStreamPtr, StreamBase* outStreamPtr, RxnBase* RxnPtr):
                 ProcObjBase(std::vector<StreamBase*>(1, inStreamPtr), std::vector<StreamBase*>(1, outStreamPtr)),
-                _RxnPtr(RxnPtr) {}
+                _RxnPtr(RxnPtr)
+            {
+                _setMainMat();
+            }
             
             // StreamBase* 포인터를 이용함. 입/출력 스트림이 정의된 경우. 코멘트를 포함함.
             RxtorBase(StreamBase* inStreamPtr, StreamBase* outStreamPtr, RxnBase* RxnPtr, std::string& Comment):
-                ProcObjBase(std::vector<StreamBase*>(1, inStreamPtr), std::vector<StreamBase*>(1, outStreamPtr), Comment), _RxnPtr(RxnPtr) {}
+                ProcObjBase(std::vector<StreamBase*>(1, inStreamPtr), std::vector<StreamBase*>(1, outStreamPtr), Comment), _RxnPtr(RxnPtr)
+            {
+                _setMainMat();
+            }
+            
+            // 인스턴스 정의부
+
+            // 반응기 내부의 물질들에 대해 총 반응지수를 계산함.
+            float calcTotalQ() const
+            {
+                float ans = 1;
+                int idx;
+                const auto& RxnChemIdx = _RxnPtr->getChemIdx();
+                auto effiVec = _RxnPtr->getEffiMat().col(_RxnPtr->getEffiMat().cols()-1);
+
+                for (auto i = 0; i < RxnChemIdx.size(); ++i)
+                {
+                    idx = functions::getVecPos(__ChemIdx, RxnChemIdx[i]);
+                    ans *= std::pow(__ChemMol[i], effiVec[i]);
+                }
+
+                return ans;
+            }
     };
 } // namespace chemprochelper
 
