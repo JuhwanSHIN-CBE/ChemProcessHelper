@@ -75,6 +75,18 @@ namespace chemprochelper
             auto getChemIdx() {return __ChemIdx;}
             auto getScalarVec() {return __ScalarVec;}
             auto getMainMat() {return __MainMat;}
+
+            // setter 정의부
+
+            void setScalarVec(const std::vector<float>& ScalarVec) {__ScalarVec = ScalarVec;}
+
+            // 인스턴스 정의부
+
+            // solveSteadyState 메소드는 virtual 함수로 하위 클래스에서 별도로 정의함. 추후 순수 가상함수로 전환예정.
+            virtual void solveSteadyState()
+            {
+
+            }
     };
 } // namespace chemprochelper
 

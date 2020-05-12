@@ -19,7 +19,7 @@ ChemBase
 
 /*
 행렬연산이 필요한 경우,
-#include _INCLUDE_CHEMPROCHELPER_SOLVER
+#define _INCLUDE_CHEMPROCHELPER_SOLVER
 를 꼭 써줄것!
 (컴파일 타임이 길어져서 별도 옵션으로 분리함.)
 */

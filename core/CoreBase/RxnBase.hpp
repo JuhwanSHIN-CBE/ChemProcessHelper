@@ -118,6 +118,7 @@ namespace chemprochelper
             }
 
             // getter 정의부
+
             auto getComment() {return _Comment;}
             auto getChemIdx() {return _ChemIdx;}
             auto getEffiMat() {return _EffiMat;}

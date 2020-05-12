@@ -131,11 +131,128 @@ namespace chemprochelper
                 for (auto i = 0; i < RxnChemIdx.size(); ++i)
                 {
                     idx = functions::getVecPos(__ChemIdx, RxnChemIdx[i]);
-                    ans *= std::pow(__ChemMol[i], effiVec[i]);
+                    ans *= std::pow(__ChemMol[idx], effiVec[i]);
                 }
 
                 return ans;
             }
+
+            // 반응기 내부의 물질들에 대해 반응지수를 계산함.
+            std::vector<float> calcQ() const
+            {
+                int idx;
+                const auto& RxnChemIdx = _RxnPtr->getChemIdx();
+                const auto& EffiMat = _RxnPtr->getEffiMat();
+                std::vector<float> ans(EffiMat.cols()-1, 1);
+                Eigen::VectorXf effiVec;
+                
+                for (auto i = 0; i < EffiMat.cols()-1; ++i)
+                {
+                    effiVec = EffiMat.col(i);
+                    for (auto j = 0; j < RxnChemIdx.size(); ++j)
+                    {
+                        idx = functions::getVecPos(__ChemIdx, RxnChemIdx[j]);
+                        ans[i] *= std::pow(__ChemMol[idx], effiVec[j]);
+                    }
+                }
+
+                return ans;
+            }
+
+            #ifdef _INCLUDE_CHEMPROCHELPER_SOLVER
+            
+            /*
+            정상 상태를 기반으로 몰 수지를 맞춤. 각 반응의 속도가 ScalarVec으로 전달되어야 함.
+            현재는 입력이나 출력 스트림 중 하나가 모든 화학종의 농도가 알려져 있어야 함.
+            */
+            void solveSteadyState()
+            {
+                assert(__ScalarVec.size() != _RxnPtr->getEffiMat().size()-1);
+
+                StreamBase* inStreamPtr = getInStreamIdx()[0];
+                StreamBase* outStreamPtr = getOutStreamIdx()[0];
+                
+                auto RxnEffiMat = _RxnPtr->getEffiMat();
+                auto RxnChemIdx = _RxnPtr->getChemIdx();
+                auto inStrChemIdx = inStreamPtr->getChemIdx();
+
+                // _ChemIdx에 입력 스트림과 출력 스트림의 화합물들을 다 저장함.
+                __ChemIdx = inStreamPtr->getChemIdx();
+
+                bool direction;
+                bool flag = false;
+
+                // 입력 스트림부터 전부 true인지 확인함.
+                
+                const auto& inStreamMask = inStreamPtr->getChemMask();
+                const auto& outStreamMask = outStreamPtr->getChemMask();
+                for (auto b : inStreamMask)
+                {
+                    if (!b) flag = true;
+                }
+                
+                if (!flag) direction = true;
+                else
+                {
+                    for (auto b : outStreamMask)
+                    {
+                        if (!b) flag = false;
+                    }
+
+                    if (flag) direction = false;
+                    else throw std::runtime_error("invalid Stream Information.");
+                }
+
+                Eigen::MatrixXf inVec, outVec;
+                inVec.resize(__MainMat.rows());
+                outVec.resize(__MainMat.cols());
+                inVec.setZero();
+                outVec.setZero();
+
+                const auto& inStreamMol = inStreamPtr->getChemMol();
+                const auto& outStreamMol = outStreamPtr->getChemMol();
+
+                // 입력 스트림의 값들이 알려진 경우
+
+                if (direction)
+                {
+                    for (auto i = 0; i < inStreamMask.size(); ++i) inVec[i] = inStreamMol[i];
+
+                    Eigen::MatrixXf inMiniVec;
+                    Eigen::MatrixXf outMiniVec;
+
+                    outMiniVec.resize(__ScalarVec.size());
+                    for (auto i = 0; i < __ScalarVec.size(); ++i)
+                    {
+                        outMiniVec[i] = __ScalarVec[i];
+                    }
+                    Eigen::MatrixXf innerMat = __MainMat.block(__ChemIdx.size(), __ChemIdx.size(), __ScalarVec.size(), __ScalarVec.size());
+                    innerMat = innerMat.inverse();
+                    inMiniVec = innerMat*outMiniVec;
+
+                    for (auto i = 0; i < __ScalarVec.size(); ++i)
+                    {
+                        inVec[i+__ChemIdx.size()] = inMiniVec[i];
+                    }
+                    innerMat = __MainMat.inverse();
+
+                    outVec = innerMat*inVec;
+
+                    for (auto i = 0; i < __ChemIdx.size(); ++i)
+                    {
+                        outStreamPtr->updateChem(__ChemIdx[i], outVec[i]);
+                    }
+                }
+
+                // 출력 스트림의 값이 알려진 경우(추후 추가 예정.)
+
+                else
+                {
+                    throw std::runtime_error("to be continued.");
+                }
+            }
+
+            #endif
     };
 } // namespace chemprochelper
 

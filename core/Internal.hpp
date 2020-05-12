@@ -127,7 +127,7 @@ namespace chemprochelper
             {"Ts", 292.0},
             {"Og", 295.0}
         };
-        const std::regex pat_big("([0-9|.]{0,})([A-Z|a-z|0-9]{1,})");
+        const std::regex pat_big("([0-9|.]{0,})([A-Za-z0-9\\(\\)]{1,})");
         const std::regex pat_sml("([A-Z][a-z]?)(\\d{0,})");
         const std::regex pat_bra("([A-Z][a-z]?|\\((?:[^()]*(?:\\(.*\\))?[^()]*)+\\))(\\d*)");
     }
@@ -268,7 +268,7 @@ namespace chemprochelper
                 elem = m[1];
                 if (elem[0] == '(')
                 {
-                    buff = _getElemComp(elem);
+                    buff = _getElemComp(elem.substr(1, elem.size()-2));
 
                     for (auto pair : buff)
                     {
@@ -315,9 +315,8 @@ namespace chemprochelper
             for (const auto& m : _RegexIter(reac, const_variables::pat_big))
             {
                 reacVec.push_back(m[2]);
-                buff = _getElemComp(m[2]);
 
-                printf("Reactant : %s\n", m[2].str().c_str());
+                buff = _getElemComp(m[2]);             
                 
                 for (const auto& pair : buff)
                 {
@@ -331,9 +330,8 @@ namespace chemprochelper
             for (const auto& m : _RegexIter(prod, const_variables::pat_big))
             {
                 prodVec.push_back(m[2]);
-                buff = _getElemComp(m[2]);
 
-                printf("Product : %s\n", m[2].str().c_str());
+                buff = _getElemComp(m[2]);                
 
                 for (const auto& pair : buff)
                 {
@@ -342,9 +340,6 @@ namespace chemprochelper
 
                 prodIdx.push_back(buff);
             }
-
-            std::printf("The size of reacIdx is %d\n", reacIdx.size());
-            std::printf("The size of prodIdx is %d\n", prodIdx.size());
 
             Eigen::MatrixXf mat(chemIdx.size(), reacVec.size() + prodVec.size());
             mat.setZero();
@@ -388,6 +383,7 @@ namespace chemprochelper
 
             for (auto i = 0; i < reacVec.size(); ++i)
             {
+                ss.str("");
                 if (abs(res[i] - 1) < 0.01)
                 {
                     reac.append(reacVec[i]);
@@ -400,10 +396,10 @@ namespace chemprochelper
                 }
                 reac.append(" + ");
             }
-            ss.str("");
 
             for (auto i = 0; i < prodVec.size(); ++i)
             {
+                ss.str("");
                 if (abs(res[i+reacVec.size()] - 1) < 0.01)
                 {
                     prod.append(prodVec[i]);
@@ -416,7 +412,6 @@ namespace chemprochelper
                 }
                 prod.append(" + ");
             }
-            ss.str("");
 
             reac.erase(reac.end()-3, reac.end());
             prod.erase(prod.end()-3, prod.end());

@@ -219,6 +219,12 @@ namespace chemprochelper
             }
 
             // 기존 화학종의 값을 덮어쓴 경우 false를 반환함.
+            bool updateChem(ChemBase* ChemIdx, const float& ChemMol)
+            {
+                return _updateChem(ChemIdx, true, ChemMol);
+            }
+
+            // 기존 화학종의 값을 덮어쓴 경우 false를 반환함.
             bool updateChem(const std::vector<ChemBase*>& ChemIdx, const std::vector<float>& ChemMol)
             {
                 assert(ChemIdx.size() == ChemMol.size());
@@ -301,6 +307,13 @@ namespace chemprochelper
                 }
 
                 return res;
+            }
+
+            // StreamBase 객체의 모든 화학종을 미지수로 변경함.
+            void setAllUnknown()
+            {
+                std::for_each(_ChemMask.begin(), _ChemMask.end(), [](auto& k)->void{k = false;});
+                std::for_each(_ChemMol.begin(), _ChemMol.end(), [](auto& k)->void{k = 0;});
             }
 
             // StreamBase 객체에서 특정 화학종을 미지수로 변경함. 성공한 경우 true를 반환함.
