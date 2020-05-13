@@ -64,8 +64,10 @@ namespace chemprochelper
                     {
                         res = false;
 
-                        _ChemMask[i] = ChemMask[i];
-                        _ChemMol[i] = ChemMol[i];
+                        auto idx = functions::getVecPos(_ChemIdx, ChemIdx[i]);
+
+                        _ChemMask[idx] = ChemMask[i];
+                        _ChemMol[idx] = ChemMol[i];
                     }
                     else
                     {
@@ -194,6 +196,11 @@ namespace chemprochelper
             auto getChemIdx() {return _ChemIdx;}
             auto getChemMask() {return _ChemMask;}
             auto getChemMol() {return _ChemMol;}
+            float getChemMol(ChemBase* ChemPtr)
+            {
+                if (!functions::inVector(_ChemIdx, ChemPtr)) return 0.0;
+                else return _ChemMol[functions::getVecPos(_ChemIdx, ChemPtr)];
+            }
 
             // 인스턴스 정의부
 
@@ -285,6 +292,7 @@ namespace chemprochelper
                     ChemIdx[idx] = it.first;
                     ChemMask[idx] = true;
                     ChemMol[idx] = it.second;
+                    ++idx;
                 }
 
                 return _updateChem(ChemIdx, ChemMask, ChemMol);
@@ -312,8 +320,11 @@ namespace chemprochelper
             // StreamBase 객체의 모든 화학종을 미지수로 변경함.
             void setAllUnknown()
             {
-                std::for_each(_ChemMask.begin(), _ChemMask.end(), [](auto& k)->void{k = false;});
-                std::for_each(_ChemMol.begin(), _ChemMol.end(), [](auto& k)->void{k = 0;});
+                for (auto i = 0; i < _ChemIdx.size(); ++i)
+                {
+                    _ChemMol[i] = 0.0;
+                    _ChemMask[i] = false;
+                }
             }
 
             // StreamBase 객체에서 특정 화학종을 미지수로 변경함. 성공한 경우 true를 반환함.
@@ -352,6 +363,22 @@ namespace chemprochelper
                 }
 
                 return ChemMask;
+            }
+
+            // 스트림의 모든 화학종의 유랑이 알려져 있으면 true를 반환한다.
+            bool chemMolIsAllKnown()
+            {
+                auto flag = true;
+                for (auto f : _ChemMask)
+                {
+                    if (!f)
+                    {
+                        flag = false;
+                        break;
+                    }
+                }
+
+                return flag;
             }
     };
 } // namespace chemprochelper

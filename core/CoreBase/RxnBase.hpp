@@ -33,12 +33,12 @@ namespace chemprochelper
             /*
             전달받은 화학식을 계수와 화합물의 std::vector로 분리함. effi에는 계수를,
             chem에는 화합물(ChemBase 객체)의 인덱스(ChemBase::_PtrVec 상 인덱스)를 저장함.
-            direction = true이면 생성물, false이면 반응물로 생각함.
+            direction = true이면 반응물, false이면 생성물로 생각함.
             */
             void _parseTerm(const std::string& term, const bool& direction,
                 std::vector<float>& effiVec, std::vector<ChemBase*>& chemVec)
             {
-                int sgn = direction ? 1 : -1;
+                int sgn = direction ? -1 : 1;
 
                 ChemBase* chemIdx;
 
@@ -59,7 +59,6 @@ namespace chemprochelper
                 std::vector<std::vector<float>> effiVec;
                 std::vector<std::vector<ChemBase*>> chemVec;
                 int curEqnIdx = 0;
-                int curChemIdx;
 
                 for (auto& eqn : eqnVec)
                 {
@@ -79,6 +78,21 @@ namespace chemprochelper
                     _parseTerm(prod, false, effiVec[curEqnIdx], chemVec[curEqnIdx]);
 
                     ++curEqnIdx;
+                }
+
+                _EffiMat.resize(_ChemIdx.size(), curEqnIdx+1);
+                _EffiMat.setZero();
+
+                for (auto j = 0; j < curEqnIdx; ++j)
+                {
+                    auto& curEffiVec = effiVec[j];
+                    auto& curChemVec = chemVec[j];
+
+                    for (auto idx = 0; idx < curChemVec.size(); ++idx)
+                    {
+                        int i = functions::getVecPos(_ChemIdx, curChemVec[idx]);
+                        _EffiMat(i, j) = curEffiVec[idx];
+                    }
                 }
 
                 // 마지막 열은 v(nu)의 합으로 구성함.

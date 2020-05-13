@@ -160,95 +160,143 @@ namespace chemprochelper
             }
 
             #ifdef _INCLUDE_CHEMPROCHELPER_SOLVER
-            
+
             /*
-            정상 상태를 기반으로 몰 수지를 맞춤. 각 반응의 속도가 ScalarVec으로 전달되어야 함.
-            현재는 입력이나 출력 스트림 중 하나가 모든 화학종의 농도가 알려져 있어야 함.
+            반응기에 대한 입력 스트림으로부터, 출력 스트림이 평형 상태가 되기 위한 전화율의 값을 각각 계산한다.
             */
-            void solveSteadyState()
+
+           #endif
+
+            #ifdef _INCLUDE_CHEMPROCHELPER_SOLVER
+
+            /*
+            값이 알려진 한쪽 스트림과 전화율을 바탕으로, 반대편 스트림의 값을 재설정함.
+            단, 반응기가 정상 상태에서 작동한다고 가정한다.
+            */
+            void solveStreamFromConvRate()
             {
-                assert(__ScalarVec.size() != _RxnPtr->getEffiMat().size()-1);
-
-                StreamBase* inStreamPtr = getInStreamIdx()[0];
-                StreamBase* outStreamPtr = getOutStreamIdx()[0];
-                
-                auto RxnEffiMat = _RxnPtr->getEffiMat();
-                auto RxnChemIdx = _RxnPtr->getChemIdx();
-                auto inStrChemIdx = inStreamPtr->getChemIdx();
-
-                // _ChemIdx에 입력 스트림과 출력 스트림의 화합물들을 다 저장함.
-                __ChemIdx = inStreamPtr->getChemIdx();
-
                 bool direction;
-                bool flag = false;
+                
+                auto inStreamPtr = getInStreamIdx()[0];
+                auto outStreamPtr = getOutStreamIdx()[0];
+                const auto rxnChemIdx = _RxnPtr->getChemIdx();
+                const auto rxnEffiMat = _RxnPtr->getEffiMat();
+                const auto inChemIdx = inStreamPtr->getChemIdx();
+                const auto outChemIdx = outStreamPtr->getChemIdx();
 
-                // 입력 스트림부터 전부 true인지 확인함.
-                
-                const auto& inStreamMask = inStreamPtr->getChemMask();
-                const auto& outStreamMask = outStreamPtr->getChemMask();
-                for (auto b : inStreamMask)
+                if (inStreamPtr->chemMolIsAllKnown())
                 {
-                    if (!b) flag = true;
+                    if (!outStreamPtr->chemMolIsAllKnown()) direction = true;
+                    else throw std::runtime_error("All stream has known.");
                 }
-                
-                if (!flag) direction = true;
                 else
                 {
-                    for (auto b : outStreamMask)
-                    {
-                        if (!b) flag = false;
-                    }
-
-                    if (flag) direction = false;
-                    else throw std::runtime_error("invalid Stream Information.");
+                    if (outStreamPtr->chemMolIsAllKnown()) direction = false;
+                    else throw std::runtime_error("All stream are unknown.");
                 }
 
-                Eigen::MatrixXf inVec, outVec;
-                inVec.resize(__MainMat.rows());
-                outVec.resize(__MainMat.cols());
-                inVec.setZero();
-                outVec.setZero();
+                Eigen::MatrixXf mat;
+                mat.resize(rxnEffiMat.rows(), rxnEffiMat.cols()-1);
+                mat.block(0,0,mat.rows(), mat.cols()) = rxnEffiMat.block(0,0,mat.rows(), mat.cols());
 
-                const auto& inStreamMol = inStreamPtr->getChemMol();
-                const auto& outStreamMol = outStreamPtr->getChemMol();
+                Eigen::VectorXf convVec = Eigen::Map<Eigen::VectorXf>(__ScalarVec.data(), __ScalarVec.size());
+                Eigen::VectorXf deltaVec = mat * convVec;
+                std::unordered_map<ChemBase*, float> ChemMol;
 
-                // 입력 스트림의 값들이 알려진 경우
-
+                // 입력 스트림이 알려진 경우
                 if (direction)
                 {
-                    for (auto i = 0; i < inStreamMask.size(); ++i) inVec[i] = inStreamMol[i];
+                    const auto inChemMol = inStreamPtr->getChemMol();                    
 
-                    Eigen::MatrixXf inMiniVec;
-                    Eigen::MatrixXf outMiniVec;
-
-                    outMiniVec.resize(__ScalarVec.size());
-                    for (auto i = 0; i < __ScalarVec.size(); ++i)
+                    for (auto chem : outChemIdx)
                     {
-                        outMiniVec[i] = __ScalarVec[i];
+                        if (functions::inVector(rxnChemIdx, chem))
+                        {
+                            ChemMol[chem] = inStreamPtr->getChemMol(chem) + deltaVec[functions::getVecPos(rxnChemIdx, chem)];
+                        }
+                        else
+                        {
+                            ChemMol[chem] = inStreamPtr->getChemMol(chem);
+                        }
                     }
-                    Eigen::MatrixXf innerMat = __MainMat.block(__ChemIdx.size(), __ChemIdx.size(), __ScalarVec.size(), __ScalarVec.size());
-                    innerMat = innerMat.inverse();
-                    inMiniVec = innerMat*outMiniVec;
+                    
+                    outStreamPtr->updateChem(ChemMol);
+                }
 
-                    for (auto i = 0; i < __ScalarVec.size(); ++i)
+                // 출력 스트림이 알려진 경우
+                else
+                {
+                    const auto outChemMol = outStreamPtr->getChemMol();
+
+                    for (auto chem : inChemIdx)
                     {
-                        inVec[i+__ChemIdx.size()] = inMiniVec[i];
+                        if (functions::inVector(rxnChemIdx, chem))
+                        {
+                            ChemMol[chem] = outStreamPtr->getChemMol(chem) - deltaVec[functions::getVecPos(rxnChemIdx, chem)];
+                        }
+                        else
+                        {
+                            ChemMol[chem] = outStreamPtr->getChemMol(chem);
+                        }
                     }
-                    innerMat = __MainMat.inverse();
 
-                    outVec = innerMat*inVec;
+                    inStreamPtr->updateChem(ChemMol);
+                }
+            }
 
-                    for (auto i = 0; i < __ChemIdx.size(); ++i)
+            #endif
+
+            #ifdef _INCLUDE_CHEMPROCHELPER_SOLVER
+
+            /*
+            입력 스트림과 출력 스트림의 값이 모두 알려진 경우 __ScalarVec의 값을 설정함.
+            단, 반응기가 정상 상태에서 작동한다고 가정한다.
+            */
+            void solveConvRateFromStream()
+            {
+                const auto& rxnChemIdx = _RxnPtr->getChemIdx();
+                
+                Eigen::VectorXf deltaVec;
+                deltaVec.resize(rxnChemIdx.size());
+                deltaVec.setZero();                
+                
+                auto inStreamPtr = getInStreamIdx()[0];
+                auto outStreamPtr = getOutStreamIdx()[0];
+
+                int idx_rci, idx_str;
+
+                for (auto i = 0; i < __ChemIdx.size(); ++i)
+                {
+                    auto ptr = __ChemIdx[i];
+                    idx_rci = functions::getVecPos(rxnChemIdx, ptr);
+
+                    // 반응물의 경우 빼야 함.
+                    if (functions::inVector(inStreamPtr->getChemIdx(), ptr))
                     {
-                        outStreamPtr->updateChem(__ChemIdx[i], outVec[i]);
+                        idx_str = functions::getVecPos(inStreamPtr->getChemIdx(), ptr);
+                        deltaVec[idx_rci] -= inStreamPtr->getChemMol()[idx_str];
+                    }
+
+                    // 생성물의 경우 더해야 함.
+                    if (functions::inVector(outStreamPtr->getChemIdx(), ptr))
+                    {
+                        idx_str = functions::getVecPos(outStreamPtr->getChemIdx(), ptr);
+                        deltaVec[idx_rci] += outStreamPtr->getChemMol()[idx_str];
                     }
                 }
 
-                // 출력 스트림의 값이 알려진 경우(추후 추가 예정.)
+                const auto& rxnEffiMat = _RxnPtr->getEffiMat();
+                Eigen::MatrixXf mat;
+                mat.resize(rxnEffiMat.rows(), rxnEffiMat.cols()-1);
 
-                else
+                mat.block(0,0,rxnEffiMat.rows(), rxnEffiMat.cols()-1) = rxnEffiMat.block(0,0,rxnEffiMat.rows(), rxnEffiMat.cols()-1);
+                Eigen::VectorXf res = mat.colPivHouseholderQr().solve(deltaVec);
+
+                __ScalarVec.clear();
+                __ScalarVec.resize(res.size());
+                for (auto i = 0; i < res.size(); ++i)
                 {
-                    throw std::runtime_error("to be continued.");
+                    __ScalarVec[i] = res[i];
                 }
             }
 
