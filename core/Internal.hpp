@@ -422,6 +422,19 @@ namespace chemprochelper
             return reac;
         }
 
+        // 주어진 Vector에서 최솟값을 찾아서 반환함.
+        template<typename T>
+        T min(const std::vector<T>& vec)
+        {
+            T init = vec[0];
+            for (auto v : vec)
+            {
+                if (v < init) init = v;
+            }
+
+            return init;
+        }
+
         #endif
     }
 }

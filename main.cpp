@@ -60,9 +60,20 @@ int main()
     RxtorBaseVec[0].solveStreamFromConvRate();
 
 
+    std::cout << "Initial condition : " << std::endl;
     for (auto i = 0; i < StreamBaseVec[1].getChemIdx().size(); ++i)
     {
         std::cout << StreamBaseVec[1].getChemIdx()[i]->getAbb() << '\t' << StreamBaseVec[1].getChemMol()[i] << std::endl;
     }
+    std::cout << std::endl;
+
+    RxtorBaseVec[0].solveConvRateFromKValue({4.0,2.5});
+
+    std::cout << "After condition : " << std::endl;
+    for (auto i = 0; i < StreamBaseVec[1].getChemIdx().size(); ++i)
+    {
+        std::cout << StreamBaseVec[1].getChemIdx()[i]->getAbb() << '\t' << StreamBaseVec[1].getChemMol()[i] << std::endl;
+    }
+    std::cout << std::endl;
 
 }

@@ -162,10 +162,122 @@ namespace chemprochelper
             #ifdef _INCLUDE_CHEMPROCHELPER_SOLVER
 
             /*
-            반응기에 대한 입력 스트림으로부터, 출력 스트림이 평형 상태가 되기 위한 전화율의 값을 각각 계산한다.
+            반응기에 대한 입력 스트림으로부터, 출력 스트림이 평형 상태가 되기 위한 전화율의 값을 각각 계산해,
+            출력 스트림에 값을 반영한다.
+            단, 반응기가 정상 상태에서 동작한다고 가정한다.
             */
+            void solveConvRateFromKValue(const std::vector<float>& K)
+            {
+                auto inStreamPtr = getInStreamIdx()[0];
+                auto outStreamPtr = getOutStreamIdx()[0];
+                const auto rxnChemIdx = _RxnPtr->getChemIdx();
+                const auto rxnEffiMat = _RxnPtr->getEffiMat();
+                const auto inChemIdx = inStreamPtr->getChemIdx();
+                const auto outChemIdx = outStreamPtr->getChemIdx();
 
-           #endif
+                // 평형 상수 개수가 맞지 않는 경우 AssertionError 발생
+                assert(rxnEffiMat.cols() - 1 == K.size());
+
+                Eigen::VectorXf KVec;
+                KVec.resize(K.size());
+                for (auto i = 0; i < K.size(); ++i) KVec[i] = K[i];
+
+                Eigen::MatrixXf mat;
+                mat.resize(rxnEffiMat.rows(), rxnEffiMat.cols()-1);
+                mat.block(0, 0, mat.rows(), mat.cols()) = rxnEffiMat.block(0,0,mat.rows(), mat.cols());
+std::cout << "Mat : \n" << mat << std::endl;
+
+                Eigen::VectorXf concVec;
+                concVec.resize(rxnChemIdx.size());
+                concVec.setZero();
+                for (auto i = 0; i < rxnChemIdx.size(); ++i)
+                {
+                    concVec[i] = inStreamPtr->getChemMol(rxnChemIdx[i]);
+                }
+
+                Eigen::VectorXf QVec;
+                QVec.resize(KVec.size());
+
+                Eigen::VectorXf convVec;
+                convVec.resize(KVec.size());
+                convVec.setZero();
+
+                // 실제로 값을 대입해보면서 최적의 값을 찾음
+                int iter = 0;
+                float delta;
+
+                std::vector<bool> beforeFlag(K.size(), true);
+                std::vector<bool> currentFlag(K.size(), true);
+
+                delta = functions::min(inStreamPtr->getChemMol()) / 100.83;
+
+                Eigen::VectorXf deltaVec;
+                deltaVec.resize(QVec.size());
+
+                for (auto i = 0; i < convVec.size(); ++i)
+                {
+                    convVec[i] = delta * std::pow(0.9, i);
+                    deltaVec[i] = convVec[i];
+                }
+
+                while (iter < 100)
+                {
+                    concVec = mat * convVec + concVec;
+std::cout << "ConcVec : \n" << concVec << std::endl;
+std::cout << "ConvVec : \n" << convVec << std::endl;
+                    for (auto j = 0; j < QVec.size(); ++j)
+                    {
+                        QVec[j] = 1;
+                        for (auto i = 0; i < concVec.size(); ++i) QVec[j] *= std::pow(concVec[i], mat(i, j));
+
+std::cout << "Current Q[" << j << "] : " << QVec[j] << std::endl;
+                    }
+                    QVec -= KVec;
+                    beforeFlag = currentFlag;
+
+                    bool iterFlag = true;
+
+                    delta = 1e+30;
+                    for (auto i = 0; i < concVec.size(); ++i)
+                    {
+                        if (concVec[i] > 0)
+                        {
+                            if (delta > concVec[i]) delta = concVec[i];
+                        }
+                    }
+
+                    for (auto j = 0; j < QVec.size(); ++j)
+                    {
+                        if (QVec[j] < 0) currentFlag[j] = true;
+                        else currentFlag[j] = false;
+
+                        if (std::abs(QVec[j] / KVec[j]) > 0.01) iterFlag = false;
+
+                        if (deltaVec[j] > delta) deltaVec[j] = delta/4;
+                    }
+
+                    if (iterFlag) break;
+
+                    for (auto j = 0; j < QVec.size(); ++j)
+                    {
+                        if (beforeFlag[j] != currentFlag[j]) deltaVec[j] /= 2;
+
+                        if (currentFlag[j] == true) convVec[j] += deltaVec[j];
+                        else convVec[j] -= deltaVec[j];
+                    }                   
+                    
+                    iter++;
+                }
+
+                for (auto i = 0; i < __ScalarVec.size(); ++i) __ScalarVec[i] = convVec[i];
+                
+                std::unordered_map<ChemBase*, float> ChemMol;
+                for (auto i = 0; i < rxnChemIdx.size(); ++i) ChemMol[rxnChemIdx[i]] = concVec[i];
+
+                outStreamPtr->updateChem(ChemMol);
+            }
+
+            #endif
 
             #ifdef _INCLUDE_CHEMPROCHELPER_SOLVER
 
